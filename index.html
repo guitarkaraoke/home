@@ -4,22 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Karaoke com Cifra</title>
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Ícones Phosphor -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- React e ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-        body { background-color: #020617; color: #f8fafc; font-family: 'Inter', sans-serif; }
-        .cifra-text { font-family: 'Courier New', Courier, monospace; white-space: pre-wrap; word-wrap: break-word; }
-        .cifra-text b { color: #2563eb; font-weight: bold; }
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
+        
+        /* Estilos específicos para o bloco da cifra estilo Cifra Club */
+        .cifra-container { font-family: 'Courier New', Courier, monospace; line-height: 1.6; }
+        .cifra-container b { font-weight: 700; cursor: pointer; }
+        .cifra-container b:hover { text-decoration: underline; }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
         @media print {
             body { background-color: #fff !important; color: #000 !important; }
             .print-hidden { display: none !important; }
-            .cifra-text { color: #000 !important; }
-            .cifra-text b { color: #000 !important; font-weight: 900 !important; }
+            .print-cifra-box { background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important; }
         }
+        
+        /* Animações */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
     </style>
 </head>
 <body>
@@ -27,63 +47,569 @@
 
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, addDoc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef, useMemo } = React;
 
-        const firebaseConfig = {
+        // ==========================================
+        // CONFIGURAÇÃO DA NUVEM (FIREBASE)
+        // ==========================================
+        const MINHAS_CHAVES_DE_NUVEM = {
             apiKey: "AIzaSyCXVoQvpKZW4Ta317aHDOebAVPYwbCDlUk",
             authDomain: "karaoke-cifra-app.firebaseapp.com",
             projectId: "karaoke-cifra-app",
             storageBucket: "karaoke-cifra-app.firebasestorage.app",
             messagingSenderId: "610450602429",
             appId: "1:610450602429:web:5f2b81f9a486dff1a3fad4"
+        }; 
+
+        let app, auth, dbFirestore, appId;
+        let isCloudConfigured = false;
+
+        if (typeof __firebase_config !== 'undefined') {
+            app = initializeApp(JSON.parse(__firebase_config));
+            auth = getAuth(app);
+            dbFirestore = getFirestore(app);
+            appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            isCloudConfigured = true;
+        } else if (MINHAS_CHAVES_DE_NUVEM) {
+            app = initializeApp(MINHAS_CHAVES_DE_NUVEM);
+            auth = getAuth(app);
+            dbFirestore = getFirestore(app);
+            appId = 'karaoke-com-cifra-site'; 
+            isCloudConfigured = true;
+        }
+
+        const CATEGORIAS = [
+            "Sertanejo", "MPB", "Flashbacks", "Internacionais", "Pop Rock Nacional", 
+            "Gospel/Religioso", "Rock", "Samba", "Pagode", "Alternativo", "Outros"
+        ];
+
+        // Lógica de Transposição Musical
+        const SCALE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        
+        const transposeChord = (chordStr, steps) => {
+            if (steps === 0) return chordStr;
+            return chordStr.split('/').map(part => {
+                const match = part.match(/^([A-G][#b]?)(.*)$/);
+                if (!match) return part;
+                
+                let note = match[1];
+                let suffix = match[2];
+
+                if (note === 'Db') note = 'C#';
+                if (note === 'Eb') note = 'D#';
+                if (note === 'Gb') note = 'F#';
+                if (note === 'Ab') note = 'G#';
+                if (note === 'Bb') note = 'A#';
+
+                let index = SCALE.indexOf(note);
+                if (index === -1) return part; 
+
+                let newIndex = (index + steps) % 12;
+                if (newIndex < 0) newIndex += 12;
+
+                return SCALE[newIndex] + suffix;
+            }).join('/');
         };
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        // Dicionário de Acordes Básicos (Para desenhar o SVG)
+        // Formato frets: E A D G B E (x = não toca, 0 = solta, numero = casa)
+        const CHORD_DICT = {
+            "C": "x32010", "Cm": "x35543", "C7": "x32310", "C#": "x46664", "C#m": "x46654",
+            "D": "xx0232", "Dm": "xx0231", "D7": "xx0212", "D#": "xx1343", "D#m": "xx1342",
+            "E": "022100", "Em": "022000", "E7": "020100", "F": "133211", "Fm": "133111",
+            "F#": "244322", "F#m": "244222", "G": "320003", "Gm": "355333", "G7": "320001",
+            "G#": "466544", "G#m": "466444", "A": "x02220", "Am": "x02210", "A7": "x02020",
+            "A#": "x13331", "A#m": "x13321", "B": "x24442", "Bm": "x24432", "B7": "x21202"
+        };
+
+        const GuitarChordSVG = ({ chordName }) => {
+            const frets = CHORD_DICT[chordName];
+            
+            if (!frets) {
+                return (
+                    <div className="flex flex-col items-center justify-center w-24 h-32 border border-slate-300 rounded bg-slate-50 text-slate-800">
+                        <span className="font-bold text-lg">{chordName}</span>
+                        <span className="text-xs text-slate-400 mt-2">Sem desenho</span>
+                    </div>
+                );
+            }
+
+            const strings = frets.split('');
+            const minFret = Math.max(1, Math.min(...strings.map(s => s === 'x' || s === '0' ? 99 : parseInt(s))) - 1);
+            
+            return (
+                <div className="flex flex-col items-center w-24 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                    <span className="font-bold text-slate-800 text-lg mb-1">{chordName}</span>
+                    <svg width="60" height="80" viewBox="0 0 60 80">
+                        {/* Linha superior grossa se for a pestana do braço */}
+                        {minFret === 1 && <line x1="10" y1="10" x2="50" y2="10" stroke="#333" strokeWidth="4" />}
+                        {minFret > 1 && <text x="0" y="25" fontSize="10" fill="#666">{minFret}ª</text>}
+                        
+                        {/* Cordas */}
+                        {[0,1,2,3,4,5].map(i => (
+                            <line key={`string-${i}`} x1={10 + i*8} y1="10" x2={10 + i*8} y2="70" stroke="#ccc" strokeWidth="1" />
+                        ))}
+                        {/* Trastes */}
+                        {[0,1,2,3,4].map(i => (
+                            <line key={`fret-${i}`} x1="10" y1={10 + i*15} x2="50" y2={10 + i*15} stroke="#ccc" strokeWidth="1" />
+                        ))}
+
+                        {/* Bolinhas e Xis */}
+                        {strings.map((val, stringIdx) => {
+                            const x = 10 + stringIdx * 8;
+                            if (val === 'x') {
+                                return <text key={`m-${stringIdx}`} x={x-3} y="8" fontSize="8" fill="#e11d48">x</text>;
+                            } else if (val === '0') {
+                                return <circle key={`o-${stringIdx}`} cx={x} cy="5" r="2.5" fill="none" stroke="#3b82f6" strokeWidth="1" />;
+                            } else {
+                                const fretVal = parseInt(val);
+                                const y = 10 + (fretVal - minFret + 0.5) * 15;
+                                return <circle key={`f-${stringIdx}`} cx={x} cy={y} r="3.5" fill="#1d4ed8" />;
+                            }
+                        })}
+                    </svg>
+                </div>
+            );
+        };
+
 
         function App() {
-            const [view, setView] = useState('home');
-            const [data, setData] = useState({ artists: [], songs: [] });
-            const [selectedArtist, setSelectedArtist] = useState(null);
-            const [selectedSong, setSelectedSong] = useState(null);
-            const [isAdmin, setIsAdmin] = useState(false);
+            const [user, setUser] = useState(null);
+            const [db, setDb] = useState({ artists: [], songs: [] });
+            const [loading, setLoading] = useState(true);
+
+            // UI
+            const [view, setView] = useState('home'); 
+            const [activeArtist, setActiveArtist] = useState(null);
+            const [activeSong, setActiveSong] = useState(null);
+            const [search, setSearch] = useState('');
+
+            // Estado da Cifra (Cifra Club Mode)
+            const [transposeSteps, setTransposeSteps] = useState(0);
+            const [capoFret, setCapoFret] = useState(0);
+            const [chordColor, setChordColor] = useState('#1d4ed8'); // Azul Forte (blue-700)
+            const [cifraFontSize, setCifraFontSize] = useState(16);
+
+            // Comentários
+            const [comments, setComments] = useState([]);
+            const [newComment, setNewComment] = useState('');
+            const [guestName, setGuestName] = useState('');
 
             useEffect(() => {
-                signInAnonymously(auth);
-                const unsub = onSnapshot(collection(db, 'data'), snap => {
-                    // Aqui seria a lógica de carregar, para já simplificada
-                });
+                if (!isCloudConfigured) return setLoading(false);
+
+                const initAuth = async () => {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                };
+                initAuth();
+                
+                const unsubscribe = onAuthStateChanged(auth, setUser);
+                return () => unsubscribe();
             }, []);
 
-            return (
-                <div className="min-h-screen bg-slate-950 p-6">
-                    <nav className="flex justify-between items-center mb-8">
-                        <h1 className="text-3xl font-black text-emerald-500">Karaoke com Cifra</h1>
-                        <button onClick={() => {
-                            const p = prompt("Senha Admin:");
-                            if (p === '1511Kcc') setIsAdmin(true);
-                        }} className="bg-slate-800 p-3 rounded-xl"><i className="ph ph-gear"></i></button>
-                    </nav>
+            useEffect(() => {
+                if (!user || !isCloudConfigured) return;
 
-                    {isAdmin ? (
-                        <div className="bg-slate-900 p-6 rounded-xl">
-                            <h2 className="text-2xl font-bold mb-4">Painel Administrativo</h2>
-                            <p>O sistema está ativo. Cadastre novos artistas e músicas aqui.</p>
-                            <button onClick={() => setIsAdmin(false)} className="mt-4 bg-red-600 px-4 py-2 rounded">Sair Admin</button>
-                        </div>
-                    ) : (
-                        <main>
-                            <h2 className="text-4xl font-bold mb-6">Bem-vindo ao nosso acervo!</h2>
-                            <p className="text-slate-400">Aqui encontrará cifras, FLACs e Backing Tracks.</p>
-                            <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
-                                {/* Aqui apareceriam os artistas carregados da nuvem */}
+                const artistsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists');
+                const songsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs');
+
+                const unsubArtists = onSnapshot(artistsRef, (snapshot) => {
+                    const artistsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setDb(prev => ({ ...prev, artists: artistsData.sort((a,b) => a.name.localeCompare(b.name)) }));
+                });
+
+                const unsubSongs = onSnapshot(songsRef, (snapshot) => {
+                    const songsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setDb(prev => ({ ...prev, songs: songsData.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)) }));
+                    setLoading(false);
+                });
+
+                return () => { unsubArtists(); unsubSongs(); };
+            }, [user]);
+
+            // Carregar Comentários da Música Ativa
+            useEffect(() => {
+                if (!user || !activeSong || !isCloudConfigured) return;
+                
+                const commentsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', `comments_${activeSong.id}`);
+                // Simple query to avoid index requirements in Canvas
+                const unsubComments = onSnapshot(commentsRef, (snapshot) => {
+                    let commentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    // Sort na memoria para evitar problemas de indexação no Firebase (Regra 2)
+                    commentsData.sort((a,b) => {
+                        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                        return timeA - timeB; // Crescente
+                    });
+                    setComments(commentsData);
+                }, (error) => console.error("Erro ao carregar comentários:", error));
+
+                return () => unsubComments();
+            }, [user, activeSong]);
+
+
+            // Navegação
+            const goHome = () => { setView('home'); window.scrollTo(0, 0); };
+            const goArtist = (artist) => { setActiveArtist(artist); setView('artist'); window.scrollTo(0, 0); };
+            const goSong = (song) => { 
+                setActiveSong(song); 
+                setTransposeSteps(0);
+                setCapoFret(0);
+                setCifraFontSize(16);
+                setView('song'); 
+                window.scrollTo(0, 0); 
+            };
+
+            const submitComment = async (e) => {
+                e.preventDefault();
+                if (!newComment.trim() || !user) return;
+                
+                const nameToSave = guestName.trim() || "Visitante";
+                const commentsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', `comments_${activeSong.id}`);
+                
+                try {
+                    await addDoc(commentsRef, {
+                        text: newComment,
+                        author: nameToSave,
+                        userId: user.uid,
+                        createdAt: serverTimestamp()
+                    });
+                    setNewComment('');
+                } catch (err) {
+                    console.error("Erro ao enviar comentário:", err);
+                }
+            };
+
+            const renderHome = () => {
+                const filteredSongs = search 
+                    ? db.songs.filter(s => s.title.toLowerCase().includes(search.toLowerCase()) || db.artists.find(a => a.id === s.artistId)?.name.toLowerCase().includes(search.toLowerCase()))
+                    : db.songs.slice(0, 8); // Apenas últimas 8 se não pesquisar
+
+                return (
+                    <div className="animate-fade-in container mx-auto px-4 py-8 max-w-6xl">
+                        <div className="text-center py-16 px-4 mb-10 bg-slate-900 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden">
+                            <div className="relative z-10">
+                                <h1 className="text-5xl md:text-7xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">
+                                    Karaoke com Cifra
+                                </h1>
+                                <p className="text-slate-300 text-xl md:text-2xl font-medium mb-8">
+                                    Encontra as tuas músicas favoritas com cifras e backing tracks.
+                                </p>
+                                <div className="max-w-xl mx-auto relative">
+                                    <i className="ph ph-magnifying-glass absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 text-xl"></i>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Buscar por música ou artista..." 
+                                        value={search}
+                                        onChange={e => setSearch(e.target.value)}
+                                        className="w-full bg-slate-800 border border-slate-700 text-white rounded-full py-4 pl-12 pr-4 focus:outline-none focus:border-blue-500 transition-colors shadow-inner"
+                                    />
+                                </div>
                             </div>
-                        </main>
-                    )}
+                        </div>
+
+                        {search ? (
+                            <div className="mb-12">
+                                <h3 className="text-2xl font-bold text-slate-100 mb-6 flex items-center gap-2"><i className="ph-fill ph-magnifying-glass text-blue-500"></i> Resultados</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {filteredSongs.map(song => {
+                                        const artist = db.artists.find(a => a.id === song.artistId);
+                                        return (
+                                            <div key={song.id} onClick={() => goSong(song)} className="bg-slate-800 p-4 rounded-xl cursor-pointer hover:bg-slate-700 transition-all flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-full bg-slate-900 flex items-center justify-center text-blue-500 shrink-0"><i className="ph-fill ph-play text-xl"></i></div>
+                                                <div className="overflow-hidden">
+                                                    <h4 className="font-bold text-white truncate">{song.title}</h4>
+                                                    <p className="text-slate-400 text-sm truncate">{artist?.name}</p>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <h3 className="text-2xl font-bold text-slate-100 mb-6 flex items-center gap-2"><i className="ph-fill ph-star text-blue-500"></i> Artistas</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-12">
+                                    {db.artists.map(artist => (
+                                        <div key={artist.id} onClick={() => goArtist(artist)} className="group cursor-pointer text-center">
+                                            <div className="w-24 h-24 mx-auto rounded-full bg-slate-800 border-2 border-slate-700 group-hover:border-blue-500 overflow-hidden mb-3 transition-all shadow-lg">
+                                                {artist.cover ? <img src={artist.cover} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"/> : <div className="w-full h-full flex items-center justify-center text-3xl text-slate-500"><i className="ph-fill ph-user"></i></div>}
+                                            </div>
+                                            <h4 className="font-bold text-slate-300 text-sm group-hover:text-blue-400 transition-colors truncate">{artist.name}</h4>
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                <h3 className="text-2xl font-bold text-slate-100 mb-6 flex items-center gap-2"><i className="ph-fill ph-music-notes text-blue-500"></i> Adicionadas Recentemente</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    {filteredSongs.map(song => {
+                                        const artist = db.artists.find(a => a.id === song.artistId);
+                                        return (
+                                            <div key={song.id} onClick={() => goSong(song)} className="bg-slate-800 p-4 rounded-xl cursor-pointer hover:bg-slate-700 border border-slate-700 hover:border-blue-500 transition-all flex items-center gap-4">
+                                                <div className="overflow-hidden">
+                                                    <h4 className="font-bold text-white truncate">{song.title}</h4>
+                                                    <p className="text-slate-400 text-sm truncate">{artist?.name}</p>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                );
+            };
+
+            const renderArtist = () => {
+                const songs = db.songs.filter(s => s.artistId === activeArtist.id);
+                return (
+                    <div className="animate-fade-in container mx-auto px-4 py-8 max-w-4xl">
+                        <button onClick={goHome} className="flex items-center gap-2 text-slate-400 hover:text-white mb-8 transition-colors">
+                            <i className="ph ph-arrow-left"></i> Voltar
+                        </button>
+
+                        <div className="flex flex-col md:flex-row gap-8 items-center md:items-start mb-12">
+                            <div className="w-40 h-40 rounded-full bg-slate-800 border-4 border-slate-700 overflow-hidden shrink-0 shadow-2xl">
+                                {activeArtist.cover ? <img src={activeArtist.cover} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-5xl text-slate-500"><i className="ph-fill ph-user"></i></div>}
+                            </div>
+                            <div className="text-center md:text-left pt-4">
+                                <h2 className="text-4xl font-black text-white mb-2">{activeArtist.name}</h2>
+                                <p className="text-blue-400 font-bold uppercase tracking-widest text-sm">{songs.length} músicas</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                            {songs.map(song => (
+                                <div key={song.id} onClick={() => goSong(song)} className="p-4 border-b border-slate-800/50 flex items-center justify-between hover:bg-slate-800 cursor-pointer group transition-colors">
+                                    <div>
+                                        <h4 className="font-bold text-slate-200 text-lg group-hover:text-blue-400 transition-colors">{song.title}</h4>
+                                        <p className="text-slate-500 text-sm">Tom: {song.key || '-'} • BPM: {song.bpm || '-'}</p>
+                                    </div>
+                                    <i className="ph-fill ph-play-circle text-2xl text-slate-600 group-hover:text-blue-500 transition-colors"></i>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderSong = () => {
+                const artist = db.artists.find(a => a.id === activeSong.artistId);
+
+                // --- LÓGICA DE TRANSPOSIÇÃO E CAPOTRASTE ---
+                // Se eu colocar o capo na casa 2, a guitarra fica 2 meios-tons mais aguda.
+                // Para soar o mesmo acorde original (ex: D), tenho que tocar o formato 2 tons abaixo (C).
+                // Portanto: shapeExibido = TomOriginal + Transpose - Capo
+                const effectiveTranspose = transposeSteps - capoFret;
+
+                // Processa a string HTML da cifra aplicando a transposição
+                const processCifraAndExtractChords = () => {
+                    if (!activeSong.cifra) return { html: "", uniqueChords: [] };
+                    
+                    const extracted = new Set();
+                    const regex = /<b>(.*?)<\/b>/g;
+                    
+                    const html = activeSong.cifra.replace(regex, (match, chordContent) => {
+                        const transposed = transposeChord(chordContent, effectiveTranspose);
+                        extracted.add(transposed);
+                        return `<b style="color: ${chordColor}">${transposed}</b>`;
+                    });
+
+                    // Limpa acordes complexos para encontrar o shape base (ex: Dm/F -> Dm)
+                    const cleanChords = Array.from(extracted).map(c => c.split('/')[0]);
+                    const finalUniqueChords = [...new Set(cleanChords)].sort();
+
+                    return { html, uniqueChords: finalUniqueChords };
+                };
+
+                const { html: processedHtml, uniqueChords } = useMemo(() => processCifraAndExtractChords(), [activeSong.cifra, effectiveTranspose, chordColor]);
+
+                return (
+                    <div className="animate-fade-in container mx-auto px-4 py-8 max-w-5xl">
+                        <button onClick={() => goArtist(artist)} className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 print-hidden transition-colors">
+                            <i className="ph ph-arrow-left"></i> Voltar para {artist?.name}
+                        </button>
+
+                        {/* Cabeçalho da Música */}
+                        <div className="mb-8">
+                            <h2 className="text-4xl md:text-5xl font-black text-white mb-2">{activeSong.title}</h2>
+                            <p className="text-xl text-blue-400 font-bold mb-4">{artist?.name}</p>
+                            
+                            <div className="flex flex-wrap gap-3 text-sm text-slate-300">
+                                <span className="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">Tom Original: <b className="text-white">{activeSong.key || '?'}</b></span>
+                                {activeSong.bpm && <span className="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">BPM: <b className="text-white">{activeSong.bpm}</b></span>}
+                            </div>
+                        </div>
+
+                        {/* Controlos Cifra Club Mode */}
+                        <div className="bg-slate-800 border border-slate-700 p-4 rounded-xl flex flex-wrap gap-6 items-center mb-6 print-hidden shadow-md">
+                            
+                            {/* Tom */}
+                            <div className="flex flex-col">
+                                <span className="text-xs text-slate-400 font-bold uppercase mb-1">Tom (Transpose)</span>
+                                <div className="flex items-center bg-slate-900 rounded-lg overflow-hidden border border-slate-700">
+                                    <button onClick={() => setTransposeSteps(p=>p-1)} className="px-3 py-1 hover:bg-slate-700 text-white transition-colors">-</button>
+                                    <span className="px-4 py-1 font-bold text-blue-400 min-w-[3rem] text-center">{transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps}</span>
+                                    <button onClick={() => setTransposeSteps(p=>p+1)} className="px-3 py-1 hover:bg-slate-700 text-white transition-colors">+</button>
+                                </div>
+                            </div>
+
+                            {/* Capotraste */}
+                            <div className="flex flex-col">
+                                <span className="text-xs text-slate-400 font-bold uppercase mb-1">Capotraste</span>
+                                <select 
+                                    value={capoFret} 
+                                    onChange={(e) => setCapoFret(parseInt(e.target.value))}
+                                    className="bg-slate-900 border border-slate-700 text-white py-1.5 px-3 rounded-lg outline-none focus:border-blue-500 cursor-pointer"
+                                >
+                                    <option value={0}>Sem Capo</option>
+                                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(num => (
+                                        <option key={num} value={num}>Casa {num}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Tamanho Texto */}
+                            <div className="flex flex-col ml-auto">
+                                <span className="text-xs text-slate-400 font-bold uppercase mb-1">Tamanho</span>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => setCifraFontSize(p => Math.max(12, p - 2))} className="w-8 h-8 rounded bg-slate-900 border border-slate-700 hover:bg-slate-700 flex items-center justify-center text-white">A-</button>
+                                    <button onClick={() => setCifraFontSize(p => Math.min(32, p + 2))} className="w-8 h-8 rounded bg-slate-900 border border-slate-700 hover:bg-slate-700 flex items-center justify-center text-white font-bold">A+</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ÁREA DA CIFRA - FUNDO BRANCO, TEXTO CINZA ESCURO */}
+                        <div 
+                            className="bg-white text-gray-800 p-6 md:p-10 rounded-xl shadow-2xl cifra-container overflow-x-auto print-cifra-box"
+                            style={{ fontSize: `${cifraFontSize}px` }}
+                        >
+                            {capoFret > 0 && (
+                                <div className="mb-6 text-sm font-bold text-rose-600 bg-rose-50 border border-rose-200 p-3 rounded-lg inline-block">
+                                    <i className="ph-fill ph-warning"></i> Capotraste na {capoFret}ª Casa
+                                </div>
+                            )}
+                            <div dangerouslySetInnerHTML={{ __html: processedHtml || "Sem cifra disponível." }} />
+                        </div>
+
+                        {/* DESENHOS DOS ACORDES */}
+                        {uniqueChords.length > 0 && (
+                            <div className="mt-8 mb-12 bg-slate-800 border border-slate-700 p-6 rounded-xl print-hidden">
+                                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                                    <i className="ph-fill ph-guitar text-blue-500"></i> Acordes usados na música
+                                </h3>
+                                <div className="flex flex-wrap gap-4">
+                                    {uniqueChords.map(chord => (
+                                        <GuitarChordSVG key={chord} chordName={chord} />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* LINKS DE ÁUDIO */}
+                        <div className="flex flex-col sm:flex-row gap-4 mt-8 print-hidden">
+                            {activeSong.flacLink && (
+                                <a href={activeSong.flacLink} target="_blank" rel="noreferrer" 
+                                className="flex items-center justify-center gap-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-4 rounded-xl font-bold transition-all shadow-lg flex-1">
+                                    <i className="ph-fill ph-file-audio text-2xl text-blue-400"></i> Baixar Áudio FLAC
+                                </a>
+                            )}
+                            {activeSong.backingTrackLink && (
+                                <a href={activeSong.backingTrackLink} target="_blank" rel="noreferrer" 
+                                className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-bold transition-all shadow-lg flex-1">
+                                    <i className="ph-fill ph-headphones text-2xl"></i> Backing Track (MP3)
+                                </a>
+                            )}
+                        </div>
+
+                        {/* SEÇÃO DE COMENTÁRIOS */}
+                        <div className="mt-16 bg-slate-900 border border-slate-800 p-6 rounded-xl print-hidden shadow-xl">
+                            <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                                <i className="ph-fill ph-chats text-blue-500"></i> Comentários
+                            </h3>
+
+                            {/* Formulário */}
+                            <form onSubmit={submitComment} className="mb-8 bg-slate-800 p-4 rounded-lg border border-slate-700">
+                                <div className="mb-4">
+                                    <label className="block text-sm font-bold text-slate-400 mb-2">Seu Nome (Visível publicamente)</label>
+                                    <input 
+                                        type="text" 
+                                        value={guestName}
+                                        onChange={e => setGuestName(e.target.value)}
+                                        placeholder="Ex: João Silva" 
+                                        className="w-full md:w-1/2 bg-slate-900 border border-slate-600 text-white rounded p-3 focus:outline-none focus:border-blue-500"
+                                    />
+                                </div>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-bold text-slate-400 mb-2">Comentário</label>
+                                    <textarea 
+                                        value={newComment}
+                                        onChange={e => setNewComment(e.target.value)}
+                                        placeholder="O que achou da cifra ou da música?" 
+                                        className="w-full bg-slate-900 border border-slate-600 text-white rounded p-3 h-24 focus:outline-none focus:border-blue-500 resize-none"
+                                    ></textarea>
+                                </div>
+                                <button type="submit" disabled={!newComment.trim()} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-bold transition-colors">
+                                    Enviar Comentário
+                                </button>
+                            </form>
+
+                            {/* Lista de Comentários */}
+                            <div className="space-y-4">
+                                {comments.length === 0 ? (
+                                    <p className="text-slate-500 text-center py-4">Seja o primeiro a comentar nesta música!</p>
+                                ) : (
+                                    comments.map(c => (
+                                        <div key={c.id} className="bg-slate-800 p-4 rounded-lg border border-slate-700/50 flex gap-4">
+                                            <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 shrink-0 font-bold uppercase">
+                                                {c.author ? c.author.charAt(0) : 'V'}
+                                            </div>
+                                            <div>
+                                                <div className="flex items-baseline gap-2 mb-1">
+                                                    <span className="font-bold text-white">{c.author || 'Visitante'}</span>
+                                                    <span className="text-xs text-slate-500">
+                                                        {c.createdAt ? new Date(c.createdAt.toMillis()).toLocaleDateString('pt-PT') : 'Agora'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-slate-300 text-sm whitespace-pre-wrap">{c.text}</p>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                    </div>
+                );
+            };
+
+            if (loading) {
+                return <div className="min-h-screen flex items-center justify-center text-blue-500"><i className="ph-fill ph-spinner-gap animate-spin text-4xl"></i></div>;
+            }
+
+            return (
+                <div className="min-h-screen pb-20">
+                    <nav className="bg-slate-900 border-b border-slate-800 sticky top-0 z-50 print-hidden shadow-lg">
+                        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+                            <div onClick={goHome} className="flex items-center gap-2 cursor-pointer group">
+                                <i className="ph-fill ph-microphone-stage text-2xl text-blue-500 group-hover:scale-110 transition-transform"></i>
+                                <span className="font-black text-xl text-white tracking-tight">K-Cifra</span>
+                            </div>
+                        </div>
+                    </nav>
+                    
+                    <main>
+                        {view === 'home' && renderHome()}
+                        {view === 'artist' && renderArtist()}
+                        {view === 'song' && renderSong()}
+                    </main>
                 </div>
             );
         }
@@ -93,5 +619,3 @@
     </script>
 </body>
 </html>
-```
-
