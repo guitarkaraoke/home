@@ -187,6 +187,23 @@
             const [activeSong, setActiveSong] = useState(null);
             const [search, setSearch] = useState('');
 
+            // Admin
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [adminPassword, setAdminPassword] = useState('');
+            const [loginError, setLoginError] = useState('');
+            const [toast, setToast] = useState('');
+
+            const [newArtistName, setNewArtistName] = useState('');
+            const [newArtistCover, setNewArtistCover] = useState('');
+
+            const [newSongTitle, setNewSongTitle] = useState('');
+            const [newSongArtistId, setNewSongArtistId] = useState('');
+            const [newSongKey, setNewSongKey] = useState('');
+            const [newSongBpm, setNewSongBpm] = useState('');
+            const [newSongCifra, setNewSongCifra] = useState('');
+            const [newSongFlac, setNewSongFlac] = useState('');
+            const [newSongBacking, setNewSongBacking] = useState('');
+
             // Estado da Cifra (Cifra Club Mode)
             const [transposeSteps, setTransposeSteps] = useState(0);
             const [capoFret, setCapoFret] = useState(0);
@@ -590,6 +607,147 @@
                 );
             };
 
+            const renderLogin = () => (
+                <div className="animate-fade-in container mx-auto px-4 py-20 max-w-md">
+                    <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-xl text-center">
+                        <i className="ph-fill ph-lock-key text-5xl text-blue-500 mb-4 inline-block"></i>
+                        <h2 className="text-2xl font-black text-white mb-6">Área Administrativa</h2>
+                        
+                        <form onSubmit={(e) => {
+                            e.preventDefault();
+                            if (adminPassword === 'admin123') { // Senha padrão simples
+                                setIsAdmin(true);
+                                setView('admin');
+                                setLoginError('');
+                            } else {
+                                setLoginError('Senha incorreta.');
+                            }
+                        }}>
+                            <input 
+                                type="password" 
+                                placeholder="Digite a senha (admin123)" 
+                                value={adminPassword}
+                                onChange={e => setAdminPassword(e.target.value)}
+                                className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-3 mb-4 focus:outline-none focus:border-blue-500 text-center"
+                            />
+                            {loginError && <p className="text-rose-500 text-sm mb-4">{loginError}</p>}
+                            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition-colors">
+                                Entrar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+
+            const renderAdmin = () => (
+                <div className="animate-fade-in container mx-auto px-4 py-8 max-w-6xl">
+                    <div className="flex justify-between items-center mb-8">
+                        <h2 className="text-3xl font-black text-white flex items-center gap-2">
+                            <i className="ph-fill ph-gear text-blue-500"></i> Painel Admin
+                        </h2>
+                        <button onClick={() => { setIsAdmin(false); setAdminPassword(''); setView('home'); }} className="text-slate-400 hover:text-rose-500 transition-colors flex items-center gap-1">
+                            <i className="ph ph-sign-out"></i> Sair
+                        </button>
+                    </div>
+
+                    {toast && (
+                        <div className="bg-emerald-500/20 border border-emerald-500 text-emerald-400 p-4 rounded-lg mb-8 flex justify-between items-center animate-fade-in">
+                            <span>{toast}</span>
+                            <button onClick={() => setToast('')}><i className="ph ph-x"></i></button>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {/* Add Artist */}
+                        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-lg h-fit">
+                            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><i className="ph-fill ph-user-plus text-blue-400"></i> Novo Artista</h3>
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                try {
+                                    await addDoc(collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists'), {
+                                        name: newArtistName,
+                                        cover: newArtistCover
+                                    });
+                                    setNewArtistName(''); setNewArtistCover('');
+                                    setToast('Artista adicionado com sucesso!');
+                                } catch (err) { setToast('Erro ao adicionar artista: ' + err.message); }
+                            }}>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm text-slate-400 mb-1">Nome do Artista</label>
+                                        <input required type="text" value={newArtistName} onChange={e=>setNewArtistName(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-slate-400 mb-1">URL da Foto de Capa</label>
+                                        <input type="url" value={newArtistCover} onChange={e=>setNewArtistCover(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
+                                    </div>
+                                    <button type="submit" className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded transition-colors">Salvar Artista</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* Add Song */}
+                        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-lg">
+                            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><i className="ph-fill ph-music-notes-plus text-blue-400"></i> Nova Música</h3>
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                try {
+                                    await addDoc(collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs'), {
+                                        title: newSongTitle,
+                                        artistId: newSongArtistId,
+                                        key: newSongKey,
+                                        bpm: newSongBpm,
+                                        cifra: newSongCifra,
+                                        flacLink: newSongFlac,
+                                        backingTrackLink: newSongBacking,
+                                        createdAt: serverTimestamp()
+                                    });
+                                    setNewSongTitle(''); setNewSongKey(''); setNewSongBpm(''); setNewSongCifra(''); setNewSongFlac(''); setNewSongBacking('');
+                                    setToast('Música adicionada com sucesso!');
+                                } catch (err) { setToast('Erro ao adicionar música: ' + err.message); }
+                            }}>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm text-slate-400 mb-1">Título da Música</label>
+                                        <input required type="text" value={newSongTitle} onChange={e=>setNewSongTitle(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-slate-400 mb-1">Artista</label>
+                                        <select required value={newSongArtistId} onChange={e=>setNewSongArtistId(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none">
+                                            <option value="">Selecione um artista...</option>
+                                            {db.artists.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-4">
+                                        <div className="flex-1">
+                                            <label className="block text-sm text-slate-400 mb-1">Tom</label>
+                                            <input type="text" placeholder="Ex: G" value={newSongKey} onChange={e=>setNewSongKey(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-sm text-slate-400 mb-1">BPM</label>
+                                            <input type="text" placeholder="Ex: 120" value={newSongBpm} onChange={e=>setNewSongBpm(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-slate-400 mb-1">Cifra (HTML com as tags &lt;b&gt; para acordes)</label>
+                                        <textarea required rows="4" placeholder="Ex: [Intro] <b>G</b>  <b>C</b>" value={newSongCifra} onChange={e=>setNewSongCifra(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none font-mono text-sm"></textarea>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-slate-400 mb-1">Link Áudio FLAC (Opcional)</label>
+                                        <input type="url" value={newSongFlac} onChange={e=>setNewSongFlac(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-slate-400 mb-1">Link Backing Track MP3 (Opcional)</label>
+                                        <input type="url" value={newSongBacking} onChange={e=>setNewSongBacking(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
+                                    </div>
+                                    <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded transition-colors">Salvar Música</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            );
+
             if (loading) {
                 return <div className="min-h-screen flex items-center justify-center text-blue-500"><i className="ph-fill ph-spinner-gap animate-spin text-4xl"></i></div>;
             }
@@ -602,6 +760,10 @@
                                 <i className="ph-fill ph-microphone-stage text-2xl text-blue-500 group-hover:scale-110 transition-transform"></i>
                                 <span className="font-black text-xl text-white tracking-tight">K-Cifra</span>
                             </div>
+                            
+                            <button onClick={() => setView(isAdmin ? 'admin' : 'login')} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
+                                <i className="ph-fill ph-lock-key"></i> <span className="hidden md:inline">Admin</span>
+                            </button>
                         </div>
                     </nav>
                     
@@ -609,6 +771,8 @@
                         {view === 'home' && renderHome()}
                         {view === 'artist' && renderArtist()}
                         {view === 'song' && renderSong()}
+                        {view === 'login' && renderLogin()}
+                        {view === 'admin' && renderAdmin()}
                     </main>
                 </div>
             );
