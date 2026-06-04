@@ -140,6 +140,10 @@
             const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
             const [adminTab, setAdminTab] = useState('songs');
             
+            // Login Admin - (MOVIDO PARA O TOPO PARA EVITAR O ECRÃ PRETO)
+            const [pin, setPin] = useState('');
+            const [pinError, setPinError] = useState(false);
+            
             // Edição / Criação
             const [editingArtistId, setEditingArtistId] = useState(null);
             const [newArtist, setNewArtist] = useState({ name: '', cover: '' });
@@ -575,16 +579,13 @@
             };
 
             const renderAdminLogin = () => {
-                const [pin, setPin] = useState('');
-                const [error, setError] = useState(false);
-
                 const handleLogin = (e) => {
                     e.preventDefault();
                     if (pin === '1511Kcc') { 
                         setIsAdminAuthenticated(true);
                         setView('admin');
                     } else {
-                        setError(true);
+                        setPinError(true);
                         setPin('');
                     }
                 };
@@ -603,12 +604,12 @@
                                     <input 
                                         type="password" 
                                         value={pin} 
-                                        onChange={e => {setPin(e.target.value); setError(false);}} 
-                                        className={`w-full bg-slate-950 border ${error ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-center tracking-widest text-lg text-slate-200 focus:border-emerald-500 outline-none transition-colors`} 
+                                        onChange={e => {setPin(e.target.value); setPinError(false);}} 
+                                        className={`w-full bg-slate-950 border ${pinError ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-center tracking-widest text-lg text-slate-200 focus:border-emerald-500 outline-none transition-colors`} 
                                         placeholder="•••••••"
                                         autoFocus
                                     />
-                                    {error && <p className="text-red-500 text-xs mt-2 text-center">Palavra-passe incorreta.</p>}
+                                    {pinError && <p className="text-red-500 text-xs mt-2 text-center">Palavra-passe incorreta.</p>}
                                 </div>
                                 <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-3 rounded-xl transition-transform hover:scale-[1.02] shadow-lg">
                                     Entrar no Painel
