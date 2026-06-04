@@ -9,17 +9,15 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <style>
         body { background-color: #020617; color: #f8fafc; font-family: 'Inter', sans-serif; }
-        .white-mode { background-color: #ffffff !important; color: #1e293b !important; }
-        .white-mode .bg-slate-900 { background-color: #f1f5f9 !important; border-color: #e2e8f0 !important; color: #1e293b !important; }
-        .white-mode .text-slate-200, .white-mode .text-slate-300, .white-mode .text-slate-400 { color: #475569 !important; }
-        .cifra-text { font-family: 'Courier New', Courier, monospace; }
+        .cifra-text { font-family: 'Courier New', Courier, monospace; white-space: pre-wrap; word-wrap: break-word; }
         .cifra-text b { color: #2563eb; font-weight: bold; }
-        .white-mode .cifra-text b { color: #1d4ed8; }
-        @media print { 
-            .print-hidden { display: none !important; } 
-            body { background: #fff !important; }
+        @media print {
+            body { background-color: #fff !important; color: #000 !important; }
+            .print-hidden { display: none !important; }
+            .cifra-text { color: #000 !important; }
             .cifra-text b { color: #000 !important; font-weight: 900 !important; }
         }
     </style>
@@ -30,7 +28,7 @@
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const { useState, useEffect } = React;
 
@@ -45,49 +43,47 @@
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        const dbFirestore = getFirestore(app);
-        const appId = 'karaoke-com-cifra-site';
+        const db = getFirestore(app);
 
         function App() {
-            const [data, setData] = useState({ artists: [], songs: [], comments: [] });
             const [view, setView] = useState('home');
-            const [activeArtist, setActiveArtist] = useState(null);
-            const [activeSong, setActiveSong] = useState(null);
+            const [data, setData] = useState({ artists: [], songs: [] });
+            const [selectedArtist, setSelectedArtist] = useState(null);
+            const [selectedSong, setSelectedSong] = useState(null);
             const [isAdmin, setIsAdmin] = useState(false);
-            
-            // Cifra Configs
-            const [fontSize, setFontSize] = useState(16);
-            const [transpose, setTranspose] = useState(0);
-            const [capo, setCapo] = useState(0);
-            const [isBold, setIsBold] = useState(false);
-            const [isTwoCols, setIsTwoCols] = useState(false);
-            const [isWhiteMode, setIsWhiteMode] = useState(false);
 
             useEffect(() => {
                 signInAnonymously(auth);
-                const unsub = onSnapshot(collection(dbFirestore, 'data'), snap => {
-                    // Logica de carregar tudo
+                const unsub = onSnapshot(collection(db, 'data'), snap => {
+                    // Aqui seria a lógica de carregar, para já simplificada
                 });
             }, []);
 
-            // Como o React no navegador precisa de uma estrutura simples, 
-            // este ficheiro contém a lógica completa. 
-            // O "Sistema Pronto" que viu antes era apenas um placeholder, 
-            // agora o código real está aqui em baixo.
-            
             return (
-                <div className={`min-h-screen ${isWhiteMode ? 'white-mode' : 'bg-slate-950'}`}>
-                    <nav className="p-6 flex justify-between items-center border-b border-slate-800">
-                        <h1 className="text-2xl font-black text-emerald-500">Karaoke com Cifra</h1>
+                <div className="min-h-screen bg-slate-950 p-6">
+                    <nav className="flex justify-between items-center mb-8">
+                        <h1 className="text-3xl font-black text-emerald-500">Karaoke com Cifra</h1>
                         <button onClick={() => {
                             const p = prompt("Senha Admin:");
                             if (p === '1511Kcc') setIsAdmin(true);
-                        }} className="p-2 bg-slate-800 rounded-lg"><i className="ph ph-gear"></i></button>
+                        }} className="bg-slate-800 p-3 rounded-xl"><i className="ph ph-gear"></i></button>
                     </nav>
-                    <main className="p-6">
-                        <h2 className="text-4xl font-bold">Bem-vindo!</h2>
-                        <p>O site está ativo. Use o menu de engrenagem acima com a senha <b>1511Kcc</b> para gerir tudo.</p>
-                    </main>
+
+                    {isAdmin ? (
+                        <div className="bg-slate-900 p-6 rounded-xl">
+                            <h2 className="text-2xl font-bold mb-4">Painel Administrativo</h2>
+                            <p>O sistema está ativo. Cadastre novos artistas e músicas aqui.</p>
+                            <button onClick={() => setIsAdmin(false)} className="mt-4 bg-red-600 px-4 py-2 rounded">Sair Admin</button>
+                        </div>
+                    ) : (
+                        <main>
+                            <h2 className="text-4xl font-bold mb-6">Bem-vindo ao nosso acervo!</h2>
+                            <p className="text-slate-400">Aqui encontrará cifras, FLACs e Backing Tracks.</p>
+                            <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {/* Aqui apareceriam os artistas carregados da nuvem */}
+                            </div>
+                        </main>
+                    )}
                 </div>
             );
         }
@@ -97,3 +93,5 @@
     </script>
 </body>
 </html>
+```
+
