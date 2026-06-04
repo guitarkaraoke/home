@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-PT">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,10 +8,10 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Ícones Phosphor -->
+    <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     
-    <!-- React e ReactDOM -->
+    <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
@@ -19,27 +19,25 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
-        
-        /* Estilos específicos para o bloco da cifra estilo Cifra Club */
-        .cifra-container { font-family: 'Courier New', Courier, monospace; line-height: 1.6; }
-        .cifra-container b { font-weight: 700; cursor: pointer; }
-        .cifra-container b:hover { text-decoration: underline; }
+        body { background-color: #020617; color: #f8fafc; font-family: 'Inter', sans-serif; }
         
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
+        /* Estilo da Cifra (Estilo Cifra Club - White Mode) */
+        .cifra-container { background-color: #ffffff; color: #374151; border-radius: 12px; font-family: 'Courier New', Courier, monospace; }
+        .cifra-container b { color: #1d4ed8; font-weight: 800; cursor: pointer; } /* Azul forte para os acordes */
+
         @media print {
             body { background-color: #fff !important; color: #000 !important; }
             .print-hidden { display: none !important; }
-            .print-cifra-box { background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important; }
+            .cifra-container { background-color: transparent !important; color: #000 !important; border: none !important; box-shadow: none !important; }
+            .cifra-container b { color: #000 !important; }
+            .print-only { display: block !important; }
         }
-        
-        /* Animações */
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .print-only { display: none; }
     </style>
 </head>
 <body>
@@ -47,15 +45,15 @@
 
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, addDoc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const { useState, useEffect, useRef, useMemo } = React;
+        const { useState, useEffect, useMemo } = React;
 
         // ==========================================
-        // CONFIGURAÇÃO DA NUVEM (FIREBASE)
+        // CONFIGURAÇÃO DO FIREBASE (NUVEM)
         // ==========================================
-        const MINHAS_CHAVES_DE_NUVEM = {
+        const firebaseConfig = {
             apiKey: "AIzaSyCXVoQvpKZW4Ta317aHDOebAVPYwbCDlUk",
             authDomain: "karaoke-cifra-app.firebaseapp.com",
             projectId: "karaoke-cifra-app",
@@ -64,716 +62,777 @@
             appId: "1:610450602429:web:5f2b81f9a486dff1a3fad4"
         }; 
 
-        let app, auth, dbFirestore, appId;
-        let isCloudConfigured = false;
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const dbFirestore = getFirestore(app);
 
-        if (typeof __firebase_config !== 'undefined') {
-            app = initializeApp(JSON.parse(__firebase_config));
-            auth = getAuth(app);
-            dbFirestore = getFirestore(app);
-            appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-            isCloudConfigured = true;
-        } else if (MINHAS_CHAVES_DE_NUVEM) {
-            app = initializeApp(MINHAS_CHAVES_DE_NUVEM);
-            auth = getAuth(app);
-            dbFirestore = getFirestore(app);
-            appId = 'karaoke-com-cifra-site'; 
-            isCloudConfigured = true;
+        // ==========================================
+        // MOTOR DE ACORDES E TRANSPOSIÇÃO
+        // ==========================================
+        const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const flats = { 'Db': 'C#', 'Eb': 'D#', 'Gb': 'F#', 'Ab': 'G#', 'Bb': 'A#' };
+
+        function transposeNote(note, steps) {
+            let n = flats[note] || note;
+            let idx = notes.indexOf(n);
+            if (idx === -1) return note;
+            let newIdx = (idx + steps) % 12;
+            if (newIdx < 0) newIdx += 12;
+            return notes[newIdx];
         }
 
-        const CATEGORIAS = [
-            "Sertanejo", "MPB", "Flashbacks", "Internacionais", "Pop Rock Nacional", 
-            "Gospel/Religioso", "Rock", "Samba", "Pagode", "Alternativo", "Outros"
-        ];
-
-        // Lógica de Transposição Musical
-        const SCALE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-        
-        const transposeChord = (chordStr, steps) => {
+        function transposeChordStr(chordStr, steps) {
             if (steps === 0) return chordStr;
-            return chordStr.split('/').map(part => {
-                const match = part.match(/^([A-G][#b]?)(.*)$/);
-                if (!match) return part;
-                
-                let note = match[1];
-                let suffix = match[2];
+            let parts = chordStr.split('/');
+            let newParts = parts.map(part => {
+                let match = part.match(/^([CDEFGAB][#b]?)(.*)$/);
+                if (match) {
+                    return transposeNote(match[1], steps) + match[2];
+                }
+                return part;
+            });
+            return newParts.join('/');
+        }
 
-                if (note === 'Db') note = 'C#';
-                if (note === 'Eb') note = 'D#';
-                if (note === 'Gb') note = 'F#';
-                if (note === 'Ab') note = 'G#';
-                if (note === 'Bb') note = 'A#';
-
-                let index = SCALE.indexOf(note);
-                if (index === -1) return part; 
-
-                let newIndex = (index + steps) % 12;
-                if (newIndex < 0) newIndex += 12;
-
-                return SCALE[newIndex] + suffix;
-            }).join('/');
+        // Mini Dicionário de Acordes para SVG
+        const chordDict = {
+            'C': { frets: [-1, 3, 2, 0, 1, 0] },
+            'C#': { frets: [-1, 4, 3, 1, 2, 1], barre: 1, baseFret: 1 },
+            'D': { frets: [-1, -1, 0, 2, 3, 2] },
+            'D#': { frets: [-1, 6, 5, 3, 4, 3], barre: 3, baseFret: 3 },
+            'E': { frets: [0, 2, 2, 1, 0, 0] },
+            'F': { frets: [1, 3, 3, 2, 1, 1], barre: 1 },
+            'F#': { frets: [2, 4, 4, 3, 2, 2], barre: 2 },
+            'G': { frets: [3, 2, 0, 0, 0, 3] },
+            'G#': { frets: [4, 6, 6, 5, 4, 4], barre: 4 },
+            'A': { frets: [-1, 0, 2, 2, 2, 0] },
+            'A#': { frets: [-1, 1, 3, 3, 3, 1], barre: 1 },
+            'B': { frets: [-1, 2, 4, 4, 4, 2], barre: 2 },
+            'Cm': { frets: [-1, 3, 5, 5, 4, 3], barre: 3 },
+            'C#m': { frets: [-1, 4, 6, 6, 5, 4], barre: 4 },
+            'Dm': { frets: [-1, -1, 0, 2, 3, 1] },
+            'Em': { frets: [0, 2, 2, 0, 0, 0] },
+            'Fm': { frets: [1, 3, 3, 1, 1, 1], barre: 1 },
+            'F#m': { frets: [2, 4, 4, 2, 2, 2], barre: 2 },
+            'Gm': { frets: [3, 5, 5, 3, 3, 3], barre: 3 },
+            'G#m': { frets: [4, 6, 6, 4, 4, 4], barre: 4 },
+            'Am': { frets: [-1, 0, 2, 2, 1, 0] },
+            'Bm': { frets: [-1, 2, 4, 4, 3, 2], barre: 2 },
+            'C7': { frets: [-1, 3, 2, 3, 1, 0] },
+            'D7': { frets: [-1, -1, 0, 2, 1, 2] },
+            'E7': { frets: [0, 2, 0, 1, 0, 0] },
+            'G7': { frets: [3, 2, 0, 0, 0, 1] },
+            'A7': { frets: [-1, 0, 2, 0, 2, 0] },
+            'B7': { frets: [-1, 2, 1, 2, 0, 2] },
         };
 
-        // Dicionário de Acordes Básicos (Para desenhar o SVG)
-        // Formato frets: E A D G B E (x = não toca, 0 = solta, numero = casa)
-        const CHORD_DICT = {
-            "C": "x32010", "Cm": "x35543", "C7": "x32310", "C#": "x46664", "C#m": "x46654",
-            "D": "xx0232", "Dm": "xx0231", "D7": "xx0212", "D#": "xx1343", "D#m": "xx1342",
-            "E": "022100", "Em": "022000", "E7": "020100", "F": "133211", "Fm": "133111",
-            "F#": "244322", "F#m": "244222", "G": "320003", "Gm": "355333", "G7": "320001",
-            "G#": "466544", "G#m": "466444", "A": "x02220", "Am": "x02210", "A7": "x02020",
-            "A#": "x13331", "A#m": "x13321", "B": "x24442", "Bm": "x24432", "B7": "x21202"
-        };
-
-        const GuitarChordSVG = ({ chordName }) => {
-            const frets = CHORD_DICT[chordName];
-            
-            if (!frets) {
+        // Componente SVG para desenhar os acordes
+        const ChordDiagram = ({ chordName }) => {
+            const chord = chordDict[chordName];
+            if (!chord) {
                 return (
-                    <div className="flex flex-col items-center justify-center w-24 h-32 border border-slate-300 rounded bg-slate-50 text-slate-800">
-                        <span className="font-bold text-lg">{chordName}</span>
-                        <span className="text-xs text-slate-400 mt-2">Sem desenho</span>
+                    <div className="w-24 h-32 border border-slate-300 bg-white rounded-lg flex items-center justify-center text-slate-800 font-bold shadow-sm">
+                        {chordName}
                     </div>
                 );
             }
 
-            const strings = frets.split('');
-            const minFret = Math.max(1, Math.min(...strings.map(s => s === 'x' || s === '0' ? 99 : parseInt(s))) - 1);
-            
             return (
-                <div className="flex flex-col items-center w-24 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
-                    <span className="font-bold text-slate-800 text-lg mb-1">{chordName}</span>
-                    <svg width="60" height="80" viewBox="0 0 60 80">
-                        {/* Linha superior grossa se for a pestana do braço */}
-                        {minFret === 1 && <line x1="10" y1="10" x2="50" y2="10" stroke="#333" strokeWidth="4" />}
-                        {minFret > 1 && <text x="0" y="25" fontSize="10" fill="#666">{minFret}ª</text>}
-                        
-                        {/* Cordas */}
-                        {[0,1,2,3,4,5].map(i => (
-                            <line key={`string-${i}`} x1={10 + i*8} y1="10" x2={10 + i*8} y2="70" stroke="#ccc" strokeWidth="1" />
+                <div className="flex flex-col items-center bg-white p-2 rounded-lg border border-slate-200 shadow-sm w-24">
+                    <span className="font-bold text-slate-800 mb-1">{chordName}</span>
+                    <svg width="60" height="70" viewBox="0 0 60 70">
+                        {/* Linhas das cordas */}
+                        {[0, 10, 20, 30, 40, 50].map((x, i) => (
+                            <line key={`s${i}`} x1={x + 5} y1="10" x2={x + 5} y2="60" stroke="#cbd5e1" strokeWidth="1" />
                         ))}
                         {/* Trastes */}
-                        {[0,1,2,3,4].map(i => (
-                            <line key={`fret-${i}`} x1="10" y1={10 + i*15} x2="50" y2={10 + i*15} stroke="#ccc" strokeWidth="1" />
+                        {[10, 22.5, 35, 47.5, 60].map((y, i) => (
+                            <line key={`f${i}`} x1="5" y1={y} x2="55" y2={y} stroke="#cbd5e1" strokeWidth={i === 0 ? "3" : "1"} />
                         ))}
+                        
+                        {/* Base Fret Text */}
+                        {chord.baseFret > 1 && (
+                            <text x="-5" y="20" fontSize="10" fill="#64748b">{chord.baseFret}ª</text>
+                        )}
 
-                        {/* Bolinhas e Xis */}
-                        {strings.map((val, stringIdx) => {
-                            const x = 10 + stringIdx * 8;
-                            if (val === 'x') {
-                                return <text key={`m-${stringIdx}`} x={x-3} y="8" fontSize="8" fill="#e11d48">x</text>;
-                            } else if (val === '0') {
-                                return <circle key={`o-${stringIdx}`} cx={x} cy="5" r="2.5" fill="none" stroke="#3b82f6" strokeWidth="1" />;
-                            } else {
-                                const fretVal = parseInt(val);
-                                const y = 10 + (fretVal - minFret + 0.5) * 15;
-                                return <circle key={`f-${stringIdx}`} cx={x} cy={y} r="3.5" fill="#1d4ed8" />;
+                        {/* Barre */}
+                        {chord.barre && (
+                            <rect x="5" y={(chord.barre * 12.5) - 2.5 + 5} width="50" height="6" rx="3" fill="#1d4ed8" />
+                        )}
+
+                        {/* Dedos / Bolinhas */}
+                        {chord.frets.map((fret, i) => {
+                            if (fret === -1) {
+                                return <text key={`x${i}`} x={i * 10 + 2} y="8" fontSize="10" fill="#ef4444">x</text>;
                             }
+                            if (fret === 0) {
+                                return <circle key={`o${i}`} cx={i * 10 + 5} cy="5" r="3" fill="none" stroke="#10b981" strokeWidth="1" />;
+                            }
+                            // Desenha bolinha se não for parte da pestana (barre)
+                            if (!chord.barre || fret > chord.barre) {
+                                return <circle key={`d${i}`} cx={i * 10 + 5} cy={(fret * 12.5) - 6.25 + 10} r="4" fill="#1d4ed8" />;
+                            }
+                            return null;
                         })}
                     </svg>
                 </div>
             );
         };
 
-
+        // ==========================================
+        // COMPONENTE PRINCIPAL (APP)
+        // ==========================================
         function App() {
             const [user, setUser] = useState(null);
             const [db, setDb] = useState({ artists: [], songs: [] });
             const [loading, setLoading] = useState(true);
 
-            // UI
+            // Variáveis globais de Estado / View
             const [view, setView] = useState('home'); 
             const [activeArtist, setActiveArtist] = useState(null);
             const [activeSong, setActiveSong] = useState(null);
             const [search, setSearch] = useState('');
+            const [showPix, setShowPix] = useState(false);
 
-            // Admin
-            const [isAdmin, setIsAdmin] = useState(false);
-            const [adminPassword, setAdminPassword] = useState('');
-            const [loginError, setLoginError] = useState('');
-            const [toast, setToast] = useState('');
+            // Segurança Admin
+            const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+            const [adminTab, setAdminTab] = useState('artists');
+            const [pin, setPin] = useState('');
+            const [pinError, setPinError] = useState(false);
+            const adminPassword = "1511Kcc"; // A SENHA DO ADMINISTRADOR
 
-            const [newArtistName, setNewArtistName] = useState('');
-            const [newArtistCover, setNewArtistCover] = useState('');
+            // Formulários Admin
+            const [newArtist, setNewArtist] = useState({ name: '', cover: '', genre: '' });
+            const [newSong, setNewSong] = useState({ artistId: '', title: '', album: '', key: '', bpm: '', flacLink: '', backingTrackLink: '', youtubeLink: '', cifra: '' });
+            const [editingArtistId, setEditingArtistId] = useState(null);
+            const [editingSongId, setEditingSongId] = useState(null);
 
-            const [newSongTitle, setNewSongTitle] = useState('');
-            const [newSongArtistId, setNewSongArtistId] = useState('');
-            const [newSongKey, setNewSongKey] = useState('');
-            const [newSongBpm, setNewSongBpm] = useState('');
-            const [newSongCifra, setNewSongCifra] = useState('');
-            const [newSongFlac, setNewSongFlac] = useState('');
-            const [newSongBacking, setNewSongBacking] = useState('');
-
-            // Estado da Cifra (Cifra Club Mode)
-            const [transposeSteps, setTransposeSteps] = useState(0);
-            const [capoFret, setCapoFret] = useState(0);
-            const [chordColor, setChordColor] = useState('#1d4ed8'); // Azul Forte (blue-700)
-            const [cifraFontSize, setCifraFontSize] = useState(16);
-
-            // Comentários
-            const [comments, setComments] = useState([]);
-            const [newComment, setNewComment] = useState('');
-            const [guestName, setGuestName] = useState('');
-
+            // Autenticação Silenciosa Firebase
             useEffect(() => {
-                if (!isCloudConfigured) return setLoading(false);
-
-                const initAuth = async () => {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                };
-                initAuth();
-                
+                signInAnonymously(auth).catch(console.error);
                 const unsubscribe = onAuthStateChanged(auth, setUser);
                 return () => unsubscribe();
             }, []);
 
+            // Sincronização com Firestore
             useEffect(() => {
-                if (!user || !isCloudConfigured) return;
+                if (!user) return;
+                const artistsRef = collection(dbFirestore, 'artists');
+                const songsRef = collection(dbFirestore, 'songs');
 
-                const artistsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists');
-                const songsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs');
-
-                const unsubArtists = onSnapshot(artistsRef, (snapshot) => {
-                    const artistsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setDb(prev => ({ ...prev, artists: artistsData.sort((a,b) => a.name.localeCompare(b.name)) }));
+                const unsubA = onSnapshot(artistsRef, snap => {
+                    setDb(prev => ({ ...prev, artists: snap.docs.map(d => ({ id: d.id, ...d.data() })) }));
                 });
-
-                const unsubSongs = onSnapshot(songsRef, (snapshot) => {
-                    const songsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setDb(prev => ({ ...prev, songs: songsData.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)) }));
+                const unsubS = onSnapshot(songsRef, snap => {
+                    setDb(prev => ({ ...prev, songs: snap.docs.map(d => ({ id: d.id, ...d.data() })) }));
                     setLoading(false);
                 });
 
-                return () => { unsubArtists(); unsubSongs(); };
+                return () => { unsubA(); unsubS(); };
             }, [user]);
 
-            // Carregar Comentários da Música Ativa
-            useEffect(() => {
-                if (!user || !activeSong || !isCloudConfigured) return;
-                
-                const commentsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', `comments_${activeSong.id}`);
-                // Simple query to avoid index requirements in Canvas
-                const unsubComments = onSnapshot(commentsRef, (snapshot) => {
-                    let commentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    // Sort na memoria para evitar problemas de indexação no Firebase (Regra 2)
-                    commentsData.sort((a,b) => {
-                        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-                        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-                        return timeA - timeB; // Crescente
-                    });
-                    setComments(commentsData);
-                }, (error) => console.error("Erro ao carregar comentários:", error));
-
-                return () => unsubComments();
-            }, [user, activeSong]);
-
-
-            // Navegação
-            const goHome = () => { setView('home'); window.scrollTo(0, 0); };
+            // Funções de navegação
+            const goHome = () => { setView('home'); setActiveArtist(null); setActiveSong(null); window.scrollTo(0, 0); };
             const goArtist = (artist) => { setActiveArtist(artist); setView('artist'); window.scrollTo(0, 0); };
-            const goSong = (song) => { 
-                setActiveSong(song); 
-                setTransposeSteps(0);
-                setCapoFret(0);
-                setCifraFontSize(16);
-                setView('song'); 
-                window.scrollTo(0, 0); 
-            };
+            const goSong = (song) => { setActiveSong(song); setView('song'); window.scrollTo(0, 0); };
+            const goAdmin = () => { isAdminAuthenticated ? setView('admin') : setView('admin-login'); window.scrollTo(0, 0); };
 
-            const submitComment = async (e) => {
-                e.preventDefault();
-                if (!newComment.trim() || !user) return;
-                
-                const nameToSave = guestName.trim() || "Visitante";
-                const commentsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', `comments_${activeSong.id}`);
-                
-                try {
-                    await addDoc(commentsRef, {
-                        text: newComment,
-                        author: nameToSave,
-                        userId: user.uid,
-                        createdAt: serverTimestamp()
-                    });
-                    setNewComment('');
-                } catch (err) {
-                    console.error("Erro ao enviar comentário:", err);
-                }
-            };
+            // Filtragem
+            const filteredArtists = db.artists.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
+            
+            // Categorias Hardcoded
+            const categories = ["Sertanejo", "MPB", "Flashbacks", "Internacionais", "Pop Rock Nacional", "Gospel/Religioso", "Rock Internacional", "Samba", "Pagode", "Bregas", "Alternativo", "Hip Hop/Rap", "Axé", "Arrocha/Forró", "Blues", "Infantil", "Outros"];
 
-            const renderHome = () => {
-                const filteredSongs = search 
-                    ? db.songs.filter(s => s.title.toLowerCase().includes(search.toLowerCase()) || db.artists.find(a => a.id === s.artistId)?.name.toLowerCase().includes(search.toLowerCase()))
-                    : db.songs.slice(0, 8); // Apenas últimas 8 se não pesquisar
-
+            if (loading) {
                 return (
-                    <div className="animate-fade-in container mx-auto px-4 py-8 max-w-6xl">
-                        <div className="text-center py-16 px-4 mb-10 bg-slate-900 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden">
-                            <div className="relative z-10">
-                                <h1 className="text-5xl md:text-7xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">
-                                    Karaoke com Cifra
-                                </h1>
-                                <p className="text-slate-300 text-xl md:text-2xl font-medium mb-8">
-                                    Encontra as tuas músicas favoritas com cifras e backing tracks.
-                                </p>
-                                <div className="max-w-xl mx-auto relative">
-                                    <i className="ph ph-magnifying-glass absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 text-xl"></i>
-                                    <input 
-                                        type="text" 
-                                        placeholder="Buscar por música ou artista..." 
-                                        value={search}
-                                        onChange={e => setSearch(e.target.value)}
-                                        className="w-full bg-slate-800 border border-slate-700 text-white rounded-full py-4 pl-12 pr-4 focus:outline-none focus:border-blue-500 transition-colors shadow-inner"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {search ? (
-                            <div className="mb-12">
-                                <h3 className="text-2xl font-bold text-slate-100 mb-6 flex items-center gap-2"><i className="ph-fill ph-magnifying-glass text-blue-500"></i> Resultados</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {filteredSongs.map(song => {
-                                        const artist = db.artists.find(a => a.id === song.artistId);
-                                        return (
-                                            <div key={song.id} onClick={() => goSong(song)} className="bg-slate-800 p-4 rounded-xl cursor-pointer hover:bg-slate-700 transition-all flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-full bg-slate-900 flex items-center justify-center text-blue-500 shrink-0"><i className="ph-fill ph-play text-xl"></i></div>
-                                                <div className="overflow-hidden">
-                                                    <h4 className="font-bold text-white truncate">{song.title}</h4>
-                                                    <p className="text-slate-400 text-sm truncate">{artist?.name}</p>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        ) : (
-                            <>
-                                <h3 className="text-2xl font-bold text-slate-100 mb-6 flex items-center gap-2"><i className="ph-fill ph-star text-blue-500"></i> Artistas</h3>
-                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-12">
-                                    {db.artists.map(artist => (
-                                        <div key={artist.id} onClick={() => goArtist(artist)} className="group cursor-pointer text-center">
-                                            <div className="w-24 h-24 mx-auto rounded-full bg-slate-800 border-2 border-slate-700 group-hover:border-blue-500 overflow-hidden mb-3 transition-all shadow-lg">
-                                                {artist.cover ? <img src={artist.cover} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"/> : <div className="w-full h-full flex items-center justify-center text-3xl text-slate-500"><i className="ph-fill ph-user"></i></div>}
-                                            </div>
-                                            <h4 className="font-bold text-slate-300 text-sm group-hover:text-blue-400 transition-colors truncate">{artist.name}</h4>
-                                        </div>
-                                    ))}
-                                </div>
-                                
-                                <h3 className="text-2xl font-bold text-slate-100 mb-6 flex items-center gap-2"><i className="ph-fill ph-music-notes text-blue-500"></i> Adicionadas Recentemente</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    {filteredSongs.map(song => {
-                                        const artist = db.artists.find(a => a.id === song.artistId);
-                                        return (
-                                            <div key={song.id} onClick={() => goSong(song)} className="bg-slate-800 p-4 rounded-xl cursor-pointer hover:bg-slate-700 border border-slate-700 hover:border-blue-500 transition-all flex items-center gap-4">
-                                                <div className="overflow-hidden">
-                                                    <h4 className="font-bold text-white truncate">{song.title}</h4>
-                                                    <p className="text-slate-400 text-sm truncate">{artist?.name}</p>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </>
-                        )}
+                    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-emerald-500 gap-4">
+                        <i className="ph-fill ph-spinner-gap text-5xl animate-spin"></i>
+                        <h2 className="text-xl font-bold">A Ligar à Nuvem...</h2>
                     </div>
                 );
-            };
+            }
+
+            // ==========================================
+            // VIEWS PÚBLICAS
+            // ==========================================
+            const renderHome = () => (
+                <div className="animate-[fadeIn_0.5s_ease-out]">
+                    <div className="text-center py-12 px-4 mb-8 bg-slate-900/50 rounded-3xl border border-slate-800">
+                        <h2 className="text-4xl md:text-6xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500">
+                            O Seu Palco Digital
+                        </h2>
+                        <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+                            O maior acervo de cifras perfeitas, FLACs e Backing Tracks.
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-6">
+                        <i className="ph-fill ph-sparkle text-2xl text-yellow-500"></i>
+                        <h3 className="text-2xl font-bold text-slate-100">Novidades</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+                        {db.songs.slice(-3).reverse().map(song => {
+                            const art = db.artists.find(a => a.id === song.artistId);
+                            return (
+                                <div key={`new-${song.id}`} onClick={() => { setActiveArtist(art); goSong(song); }} className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center gap-4 cursor-pointer hover:border-emerald-500 transition-colors">
+                                    <div className="w-12 h-12 bg-slate-800 rounded-full overflow-hidden flex-shrink-0">
+                                        {art?.cover ? <img src={art.cover} className="w-full h-full object-cover"/> : <i className="ph ph-music-notes text-2xl m-3 text-slate-500"></i>}
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-200">{song.title}</h4>
+                                        <p className="text-sm text-slate-400">{art?.name}</p>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-6">
+                        <i className="ph-fill ph-microphone-stage text-2xl text-emerald-500"></i>
+                        <h3 className="text-2xl font-bold text-slate-100">Navegar por Artistas</h3>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
+                        {filteredArtists.map(artist => (
+                            <div key={artist.id} onClick={() => goArtist(artist)} className="group cursor-pointer bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 hover:border-emerald-500/50 transition-all duration-300 hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.3)]">
+                                <div className="aspect-square relative overflow-hidden bg-slate-800 flex items-center justify-center">
+                                    {artist.cover ? (
+                                        <img src={artist.cover} alt={artist.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                    ) : (
+                                        <i className="ph ph-microphone-stage text-4xl text-slate-600"></i>
+                                    )}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/20 to-transparent"></div>
+                                </div>
+                                <div className="p-4">
+                                    <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider">{artist.genre}</span>
+                                    <h4 className="font-bold text-lg text-slate-100 mt-1 leading-tight">{artist.name}</h4>
+                                    <p className="text-slate-500 text-xs mt-2">{db.songs.filter(s => s.artistId === artist.id).length} músicas</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
 
             const renderArtist = () => {
                 const songs = db.songs.filter(s => s.artistId === activeArtist.id);
                 return (
-                    <div className="animate-fade-in container mx-auto px-4 py-8 max-w-4xl">
-                        <button onClick={goHome} className="flex items-center gap-2 text-slate-400 hover:text-white mb-8 transition-colors">
-                            <i className="ph ph-arrow-left"></i> Voltar
+                    <div className="animate-[fadeIn_0.3s_ease-out]">
+                        <button onClick={goHome} className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 mb-6 font-medium">
+                            <i className="ph ph-arrow-left font-bold"></i> Voltar
                         </button>
-
-                        <div className="flex flex-col md:flex-row gap-8 items-center md:items-start mb-12">
-                            <div className="w-40 h-40 rounded-full bg-slate-800 border-4 border-slate-700 overflow-hidden shrink-0 shadow-2xl">
-                                {activeArtist.cover ? <img src={activeArtist.cover} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-5xl text-slate-500"><i className="ph-fill ph-user"></i></div>}
-                            </div>
+                        <div className="flex flex-col md:flex-row gap-6 mb-10 items-center md:items-start">
+                            {activeArtist.cover ? (
+                                <img src={activeArtist.cover} className="w-40 h-40 rounded-full object-cover border-4 border-slate-800 shadow-2xl" />
+                            ) : (
+                                <div className="w-40 h-40 rounded-full bg-slate-800 border-4 border-slate-700 flex items-center justify-center text-5xl text-slate-600">
+                                    <i className="ph ph-user"></i>
+                                </div>
+                            )}
                             <div className="text-center md:text-left pt-4">
-                                <h2 className="text-4xl font-black text-white mb-2">{activeArtist.name}</h2>
-                                <p className="text-blue-400 font-bold uppercase tracking-widest text-sm">{songs.length} músicas</p>
+                                <h2 className="text-5xl font-black text-slate-100">{activeArtist.name}</h2>
+                                <p className="text-emerald-500 font-medium mt-2 text-lg">{activeArtist.genre}</p>
                             </div>
                         </div>
-
-                        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-                            {songs.map(song => (
-                                <div key={song.id} onClick={() => goSong(song)} className="p-4 border-b border-slate-800/50 flex items-center justify-between hover:bg-slate-800 cursor-pointer group transition-colors">
-                                    <div>
-                                        <h4 className="font-bold text-slate-200 text-lg group-hover:text-blue-400 transition-colors">{song.title}</h4>
-                                        <p className="text-slate-500 text-sm">Tom: {song.key || '-'} • BPM: {song.bpm || '-'}</p>
+                        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                            <div className="bg-slate-800/50 p-4 border-b border-slate-800">
+                                <h3 className="font-bold text-lg text-slate-200">Repertório</h3>
+                            </div>
+                            <div className="divide-y divide-slate-800/50">
+                                {songs.map(song => (
+                                    <div key={song.id} onClick={() => goSong(song)} className="p-4 flex items-center justify-between hover:bg-slate-800/30 cursor-pointer group transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-slate-900 transition-colors">
+                                                <i className="ph-fill ph-play"></i>
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-slate-200 text-lg">{song.title}</h4>
+                                                <p className="text-slate-500 text-sm">{song.album ? `Álbum: ${song.album} • ` : ''}Tom: {song.key} • BPM: {song.bpm}</p>
+                                            </div>
+                                        </div>
+                                        <i className="ph ph-caret-right text-slate-600 group-hover:text-emerald-500"></i>
                                     </div>
-                                    <i className="ph-fill ph-play-circle text-2xl text-slate-600 group-hover:text-blue-500 transition-colors"></i>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
                     </div>
                 );
             };
 
-            const renderSong = () => {
-                const artist = db.artists.find(a => a.id === activeSong.artistId);
+            const SongView = ({ song, artist }) => {
+                const [toneShift, setToneShift] = useState(0);
+                const [capo, setCapo] = useState(0);
+                const [cols, setCols] = useState(1);
+                const [fontSize, setFontSize] = useState(16);
+                
+                // Comentários
+                const [comments, setComments] = useState([]);
+                const [newCommName, setNewCommName] = useState('');
+                const [newCommText, setNewCommText] = useState('');
 
-                // --- LÓGICA DE TRANSPOSIÇÃO E CAPOTRASTE ---
-                // Se eu colocar o capo na casa 2, a guitarra fica 2 meios-tons mais aguda.
-                // Para soar o mesmo acorde original (ex: D), tenho que tocar o formato 2 tons abaixo (C).
-                // Portanto: shapeExibido = TomOriginal + Transpose - Capo
-                const effectiveTranspose = transposeSteps - capoFret;
-
-                // Processa a string HTML da cifra aplicando a transposição
-                const processCifraAndExtractChords = () => {
-                    if (!activeSong.cifra) return { html: "", uniqueChords: [] };
-                    
-                    const extracted = new Set();
-                    const regex = /<b>(.*?)<\/b>/g;
-                    
-                    const html = activeSong.cifra.replace(regex, (match, chordContent) => {
-                        const transposed = transposeChord(chordContent, effectiveTranspose);
-                        extracted.add(transposed);
-                        return `<b style="color: ${chordColor}">${transposed}</b>`;
+                // Buscar comentários
+                useEffect(() => {
+                    const q = query(collection(dbFirestore, 'comments'), where('songId', '==', song.id), orderBy('createdAt', 'desc'));
+                    const unsub = onSnapshot(q, snap => {
+                        setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                     });
+                    return () => unsub();
+                }, [song.id]);
 
-                    // Limpa acordes complexos para encontrar o shape base (ex: Dm/F -> Dm)
-                    const cleanChords = Array.from(extracted).map(c => c.split('/')[0]);
-                    const finalUniqueChords = [...new Set(cleanChords)].sort();
-
-                    return { html, uniqueChords: finalUniqueChords };
+                const postComment = async (e) => {
+                    e.preventDefault();
+                    if(!newCommName || !newCommText) return;
+                    await addDoc(collection(dbFirestore, 'comments'), {
+                        songId: song.id,
+                        author: newCommName,
+                        text: newCommText,
+                        createdAt: serverTimestamp()
+                    });
+                    setNewCommText('');
                 };
 
-                const { html: processedHtml, uniqueChords } = useMemo(() => processCifraAndExtractChords(), [activeSong.cifra, effectiveTranspose, chordColor]);
+                // Motor de Transposição em Tempo Real
+                const processedCifra = useMemo(() => {
+                    const netShift = toneShift - capo;
+                    if (netShift === 0) return song.cifra;
+                    
+                    return song.cifra.replace(/<b>(.*?)<\/b>/g, (match, chordGroup) => {
+                        const newChord = transposeChordStr(chordGroup, netShift);
+                        return `<b>${newChord}</b>`;
+                    });
+                }, [song.cifra, toneShift, capo]);
+
+                // Extrair acordes para desenhar
+                const uniqueChords = useMemo(() => {
+                    const matches = [...processedCifra.matchAll(/<b>(.*?)<\/b>/g)];
+                    return Array.from(new Set(matches.map(m => m[1])));
+                }, [processedCifra]);
 
                 return (
-                    <div className="animate-fade-in container mx-auto px-4 py-8 max-w-5xl">
-                        <button onClick={() => goArtist(artist)} className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 print-hidden transition-colors">
-                            <i className="ph ph-arrow-left"></i> Voltar para {artist?.name}
+                    <div className="animate-[fadeIn_0.3s_ease-out]">
+                        <button onClick={() => goArtist(artist)} className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 mb-6 font-medium print-hidden">
+                            <i className="ph ph-arrow-left font-bold"></i> Voltar para {artist.name}
                         </button>
 
-                        {/* Cabeçalho da Música */}
-                        <div className="mb-8">
-                            <h2 className="text-4xl md:text-5xl font-black text-white mb-2">{activeSong.title}</h2>
-                            <p className="text-xl text-blue-400 font-bold mb-4">{artist?.name}</p>
-                            
-                            <div className="flex flex-wrap gap-3 text-sm text-slate-300">
-                                <span className="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">Tom Original: <b className="text-white">{activeSong.key || '?'}</b></span>
-                                {activeSong.bpm && <span className="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">BPM: <b className="text-white">{activeSong.bpm}</b></span>}
-                            </div>
-                        </div>
-
-                        {/* Controlos Cifra Club Mode */}
-                        <div className="bg-slate-800 border border-slate-700 p-4 rounded-xl flex flex-wrap gap-6 items-center mb-6 print-hidden shadow-md">
-                            
-                            {/* Tom */}
-                            <div className="flex flex-col">
-                                <span className="text-xs text-slate-400 font-bold uppercase mb-1">Tom (Transpose)</span>
-                                <div className="flex items-center bg-slate-900 rounded-lg overflow-hidden border border-slate-700">
-                                    <button onClick={() => setTransposeSteps(p=>p-1)} className="px-3 py-1 hover:bg-slate-700 text-white transition-colors">-</button>
-                                    <span className="px-4 py-1 font-bold text-blue-400 min-w-[3rem] text-center">{transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps}</span>
-                                    <button onClick={() => setTransposeSteps(p=>p+1)} className="px-3 py-1 hover:bg-slate-700 text-white transition-colors">+</button>
+                        {/* Top Header - YouTube & Downloads */}
+                        <div className="grid md:grid-cols-3 gap-6 mb-8 print-hidden">
+                            <div className="md:col-span-2 bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+                                <div className="absolute top-[-20%] right-[-10%] text-slate-800/30 pointer-events-none">
+                                    <i className="ph-fill ph-speaker-hifi text-[250px]"></i>
+                                </div>
+                                <div className="relative z-10 flex flex-col h-full justify-between">
+                                    <div>
+                                        <span className="bg-slate-800 text-emerald-400 text-xs font-bold px-3 py-1 rounded-full mb-4 inline-block border border-slate-700">{artist.genre}</span>
+                                        <h2 className="text-4xl md:text-5xl font-black text-slate-100 mb-2">{song.title}</h2>
+                                        <p className="text-xl text-emerald-500 mb-2">{artist.name}</p>
+                                        {song.album && <p className="text-sm text-slate-400 mb-6">Álbum: {song.album}</p>}
+                                        
+                                        <div className="flex gap-3 mb-8">
+                                            <span className="flex items-center gap-1 bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 text-sm text-slate-300 font-mono"><i className="ph ph-music-notes"></i> Tom: {transposeChordStr(song.key || '-', toneShift)}</span>
+                                            <span className="flex items-center gap-1 bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 text-sm text-slate-300 font-mono"><i className="ph ph-metronome"></i> BPM: {song.bpm || '-'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row gap-4 mt-auto">
+                                        {song.flacLink && (
+                                            <a href={song.flacLink} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 p-4 rounded-xl font-bold transition-all shadow-lg">
+                                                <i className="ph-fill ph-file-audio text-xl"></i> Baixar Áudio FLAC
+                                            </a>
+                                        )}
+                                        {song.backingTrackLink && (
+                                            <a href={song.backingTrackLink} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white p-4 rounded-xl font-bold transition-all shadow-lg">
+                                                <i className="ph-fill ph-waveform text-xl"></i> Baixar Backing Tracks
+                                            </a>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Capotraste */}
-                            <div className="flex flex-col">
-                                <span className="text-xs text-slate-400 font-bold uppercase mb-1">Capotraste</span>
-                                <select 
-                                    value={capoFret} 
-                                    onChange={(e) => setCapoFret(parseInt(e.target.value))}
-                                    className="bg-slate-900 border border-slate-700 text-white py-1.5 px-3 rounded-lg outline-none focus:border-blue-500 cursor-pointer"
-                                >
-                                    <option value={0}>Sem Capo</option>
-                                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(num => (
-                                        <option key={num} value={num}>Casa {num}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Tamanho Texto */}
-                            <div className="flex flex-col ml-auto">
-                                <span className="text-xs text-slate-400 font-bold uppercase mb-1">Tamanho</span>
-                                <div className="flex items-center gap-2">
-                                    <button onClick={() => setCifraFontSize(p => Math.max(12, p - 2))} className="w-8 h-8 rounded bg-slate-900 border border-slate-700 hover:bg-slate-700 flex items-center justify-center text-white">A-</button>
-                                    <button onClick={() => setCifraFontSize(p => Math.min(32, p + 2))} className="w-8 h-8 rounded bg-slate-900 border border-slate-700 hover:bg-slate-700 flex items-center justify-center text-white font-bold">A+</button>
+                            {/* YouTube Player */}
+                            {song.youtubeLink ? (
+                                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl flex flex-col">
+                                    <div className="flex items-center gap-2 mb-3 px-2">
+                                        <i className="ph-fill ph-youtube-logo text-red-500 text-xl"></i>
+                                        <h3 className="font-bold text-slate-200">Cover de Referência</h3>
+                                    </div>
+                                    <div className="w-full aspect-video rounded-xl overflow-hidden bg-black flex-grow">
+                                        <iframe 
+                                            width="100%" height="100%" 
+                                            src={song.youtubeLink.replace("watch?v=", "embed/")} 
+                                            title="YouTube video player" frameBorder="0" 
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen>
+                                        </iframe>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
-
-                        {/* ÁREA DA CIFRA - FUNDO BRANCO, TEXTO CINZA ESCURO */}
-                        <div 
-                            className="bg-white text-gray-800 p-6 md:p-10 rounded-xl shadow-2xl cifra-container overflow-x-auto print-cifra-box"
-                            style={{ fontSize: `${cifraFontSize}px` }}
-                        >
-                            {capoFret > 0 && (
-                                <div className="mb-6 text-sm font-bold text-rose-600 bg-rose-50 border border-rose-200 p-3 rounded-lg inline-block">
-                                    <i className="ph-fill ph-warning"></i> Capotraste na {capoFret}ª Casa
+                            ) : (
+                                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col items-center justify-center text-slate-600 text-center">
+                                    <i className="ph ph-video-camera-slash text-4xl mb-2"></i>
+                                    <p>Sem vídeo de referência</p>
                                 </div>
                             )}
-                            <div dangerouslySetInnerHTML={{ __html: processedHtml || "Sem cifra disponível." }} />
                         </div>
 
-                        {/* DESENHOS DOS ACORDES */}
-                        {uniqueChords.length > 0 && (
-                            <div className="mt-8 mb-12 bg-slate-800 border border-slate-700 p-6 rounded-xl print-hidden">
-                                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                                    <i className="ph-fill ph-guitar text-blue-500"></i> Acordes usados na música
-                                </h3>
-                                <div className="flex flex-wrap gap-4">
-                                    {uniqueChords.map(chord => (
-                                        <GuitarChordSVG key={chord} chordName={chord} />
-                                    ))}
+                        {/* Cifra Club - Area */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8">
+                            
+                            {/* Ferramentas */}
+                            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 border-b border-slate-800 pb-6 print-hidden">
+                                <div className="flex items-center gap-2">
+                                    <i className="ph-fill ph-text-aa text-emerald-500 text-2xl"></i>
+                                    <h3 className="text-2xl font-bold text-slate-200">Cifra e Letra</h3>
+                                </div>
+                                
+                                <div className="flex flex-wrap items-center gap-3">
+                                    {/* Tom */}
+                                    <div className="flex items-center bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
+                                        <button onClick={() => setToneShift(t => t - 1)} className="px-3 py-2 hover:bg-slate-700 text-emerald-400 font-bold">-</button>
+                                        <span className="px-2 text-sm font-bold w-20 text-center">Tom: {toneShift > 0 ? `+${toneShift}` : toneShift}</span>
+                                        <button onClick={() => setToneShift(t => t + 1)} className="px-3 py-2 hover:bg-slate-700 text-emerald-400 font-bold">+</button>
+                                    </div>
+
+                                    {/* Capo */}
+                                    <div className="flex items-center bg-slate-800 rounded-lg overflow-hidden border border-slate-700 px-2 py-1">
+                                        <span className="text-sm font-bold text-slate-300 mr-2">Capo:</span>
+                                        <select value={capo} onChange={e => setCapo(parseInt(e.target.value))} className="bg-transparent text-emerald-400 font-bold outline-none cursor-pointer">
+                                            <option value={0}>Nenhum</option>
+                                            {[...Array(12)].map((_, i) => <option key={i} value={i+1}>{i+1}ª Casa</option>)}
+                                        </select>
+                                    </div>
+
+                                    {/* Font Size */}
+                                    <div className="flex items-center bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
+                                        <button onClick={() => setFontSize(f => Math.max(10, f - 2))} className="px-3 py-2 hover:bg-slate-700 font-bold">-A</button>
+                                        <span className="px-2 text-sm text-slate-400">{fontSize}px</span>
+                                        <button onClick={() => setFontSize(f => Math.min(30, f + 2))} className="px-3 py-2 hover:bg-slate-700 font-bold">+A</button>
+                                    </div>
+
+                                    {/* Columns */}
+                                    <button onClick={() => setCols(c => c === 1 ? 2 : 1)} className={`px-4 py-2 rounded-lg border text-sm font-bold flex items-center gap-2 transition-colors ${cols === 2 ? 'bg-emerald-500 border-emerald-500 text-slate-900' : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'}`}>
+                                        <i className="ph ph-columns"></i> 2 Colunas
+                                    </button>
+
+                                    {/* Print */}
+                                    <button onClick={() => window.print()} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors">
+                                        <i className="ph ph-printer text-lg"></i> Imprimir/PDF
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            {/* Caixa Branca da Cifra */}
+                            <div className="cifra-container p-6 md:p-10 shadow-inner">
+                                <div className="print-only mb-8 border-b border-gray-300 pb-4">
+                                    <div className="flex justify-between items-end">
+                                        <div>
+                                            <h1 className="text-4xl font-black mb-1 text-black">{song.title}</h1>
+                                            <h2 className="text-2xl text-gray-700 mb-3">{artist.name}</h2>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="font-bold text-emerald-600">Karaoke Cifra</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-4 mt-2">
+                                        <p className="text-sm">Tom: <b>{transposeChordStr(song.key || '-', toneShift)}</b></p>
+                                        <p className="text-sm">BPM: <b>{song.bpm}</b></p>
+                                        {capo > 0 && <p className="text-sm">Capo: <b>{capo}ª Casa</b></p>}
+                                    </div>
+                                </div>
+                                <pre 
+                                    className="whitespace-pre-wrap break-words leading-[1.8]"
+                                    style={{ fontSize: `${fontSize}px`, columnCount: cols, columnGap: '40px' }}
+                                    dangerouslySetInnerHTML={{ __html: processedCifra }}
+                                />
+                            </div>
+
+                            {/* Diagramas de Acordes */}
+                            {uniqueChords.length > 0 && (
+                                <div className="mt-12 pt-8 border-t border-slate-800">
+                                    <h3 className="text-xl font-bold text-slate-200 mb-6 flex items-center gap-2">
+                                        <i className="ph-fill ph-guitar text-emerald-500"></i> Acordes da Música {capo > 0 ? `(Relativos ao Capo ${capo})` : ''}
+                                    </h3>
+                                    <div className="flex flex-wrap gap-4">
+                                        {uniqueChords.map(chord => (
+                                            <ChordDiagram key={chord} chordName={chord} />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Sistema de Comentários */}
+                        <div className="mt-12 bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 print-hidden">
+                            <h3 className="text-2xl font-bold text-slate-200 mb-6 flex items-center gap-2">
+                                <i className="ph-fill ph-chats-circle text-emerald-500"></i> Comentários ({comments.length})
+                            </h3>
+                            
+                            <form onSubmit={postComment} className="mb-10 bg-slate-950 p-6 rounded-2xl border border-slate-800">
+                                <div className="grid md:grid-cols-3 gap-4 mb-4">
+                                    <div className="md:col-span-1">
+                                        <input required type="text" value={newCommName} onChange={e=>setNewCommName(e.target.value)} placeholder="O seu Nome" className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <input required type="text" value={newCommText} onChange={e=>setNewCommText(e.target.value)} placeholder="Deixe uma dica, agradecimento ou dúvida sobre a música..." className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" />
+                                    </div>
+                                </div>
+                                <div className="flex justify-end">
+                                    <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2 rounded-lg transition-colors">Publicar Comentário</button>
+                                </div>
+                            </form>
+
+                            <div className="space-y-4">
+                                {comments.map(c => (
+                                    <div key={c.id} className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center font-bold">{c.author.charAt(0).toUpperCase()}</div>
+                                            <span className="font-bold text-slate-200">{c.author}</span>
+                                            <span className="text-xs text-slate-500">• {c.createdAt?.toDate().toLocaleDateString('pt-PT')}</span>
+                                        </div>
+                                        <p className="text-slate-300 pl-10">{c.text}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderAdminLogin = () => {
+                const handleLogin = (e) => {
+                    e.preventDefault();
+                    if (pin === adminPassword) { 
+                        setIsAdminAuthenticated(true);
+                        setView('admin');
+                    } else {
+                        setPinError(true);
+                        setPin('');
+                    }
+                };
+
+                return (
+                    <div className="animate-[fadeIn_0.3s_ease-out] flex flex-col items-center justify-center py-12 md:py-24 print-hidden">
+                        <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl max-w-sm w-full shadow-2xl">
+                            <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <i className="ph-fill ph-lock-key text-3xl text-emerald-500"></i>
+                            </div>
+                            <h2 className="text-2xl font-black text-center text-slate-100 mb-6">Acesso Restrito</h2>
+                            
+                            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+                                <div>
+                                    <label className="block text-sm text-slate-400 mb-1">Palavra-passe de Gestor</label>
+                                    <input 
+                                        type="password" 
+                                        value={pin} 
+                                        onChange={e => {setPin(e.target.value); setPinError(false);}} 
+                                        className={`w-full bg-slate-950 border ${pinError ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-center tracking-widest text-lg text-slate-200 focus:border-emerald-500 outline-none transition-colors`} 
+                                        placeholder="••••"
+                                        autoFocus
+                                    />
+                                    {pinError && <p className="text-red-500 text-xs mt-2 text-center">Palavra-passe incorreta.</p>}
+                                </div>
+                                <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-3 rounded-xl transition-transform hover:scale-[1.02]">
+                                    Entrar no Painel
+                                </button>
+                                <button type="button" onClick={goHome} className="text-slate-500 hover:text-slate-300 text-sm mt-2">
+                                    Cancelar e Voltar
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderAdmin = () => {
+                const handleSaveArtist = async (e) => {
+                    e.preventDefault();
+                    try {
+                        if (editingArtistId) {
+                            await updateDoc(doc(dbFirestore, 'artists', editingArtistId), newArtist);
+                            alert('Artista atualizado!');
+                        } else {
+                            await addDoc(collection(dbFirestore, 'artists'), newArtist);
+                            alert('Artista criado!');
+                        }
+                        setNewArtist({ name: '', cover: '', genre: '' });
+                        setEditingArtistId(null);
+                    } catch(err) { console.error(err); alert('Erro ao salvar.'); }
+                };
+
+                const handleSaveSong = async (e) => {
+                    e.preventDefault();
+                    if (!newSong.artistId) return alert('Selecione um Artista!');
+                    try {
+                        if (editingSongId) {
+                            await updateDoc(doc(dbFirestore, 'songs', editingSongId), newSong);
+                            alert('Música atualizada!');
+                        } else {
+                            await addDoc(collection(dbFirestore, 'songs'), newSong);
+                            alert('Música criada!');
+                        }
+                        setNewSong({ artistId: '', title: '', album: '', key: '', bpm: '', flacLink: '', backingTrackLink: '', youtubeLink: '', cifra: '' });
+                        setEditingSongId(null);
+                    } catch(err) { console.error(err); alert('Erro ao salvar.'); }
+                };
+
+                const editArtist = (artist) => { setNewArtist(artist); setEditingArtistId(artist.id); window.scrollTo(0,0); };
+                const deleteArtist = async (id) => {
+                    if(!confirm('Apagar artista e TODAS as suas músicas?')) return;
+                    await deleteDoc(doc(dbFirestore, 'artists', id));
+                    db.songs.filter(s => s.artistId === id).forEach(s => deleteDoc(doc(dbFirestore, 'songs', s.id)));
+                };
+
+                const editSong = (song) => { setNewSong(song); setEditingSongId(song.id); window.scrollTo(0,0); };
+                const deleteSong = async (id) => {
+                    if(!confirm('Apagar esta música?')) return;
+                    await deleteDoc(doc(dbFirestore, 'songs', id));
+                };
+
+                return (
+                    <div className="animate-[fadeIn_0.3s_ease-out] print-hidden">
+                        <div className="flex items-center justify-between mb-8 border-b border-slate-800 pb-4">
+                            <div>
+                                <h2 className="text-3xl font-black text-slate-100 flex items-center gap-3">
+                                    <i className="ph-fill ph-cloud-check text-emerald-500"></i> Painel da Nuvem
+                                </h2>
+                            </div>
+                            <button onClick={goHome} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-bold">Sair do Admin</button>
+                        </div>
+
+                        <div className="flex gap-2 mb-6 overflow-x-auto">
+                            <button onClick={() => setAdminTab('artists')} className={`px-4 py-2 rounded-lg font-bold ${adminTab === 'artists' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>1. Artistas</button>
+                            <button onClick={() => setAdminTab('songs')} className={`px-4 py-2 rounded-lg font-bold ${adminTab === 'songs' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>2. Músicas</button>
+                        </div>
+
+                        {adminTab === 'artists' && (
+                            <div className="grid md:grid-cols-2 gap-8">
+                                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                                    <h3 className="text-xl font-bold mb-4">{editingArtistId ? 'Editar Artista' : 'Novo Artista'}</h3>
+                                    <form onSubmit={handleSaveArtist} className="flex flex-col gap-4">
+                                        <input required type="text" value={newArtist.name} onChange={e => setNewArtist({...newArtist, name: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Nome da Banda" />
+                                        <select required value={newArtist.genre} onChange={e => setNewArtist({...newArtist, genre: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white">
+                                            <option value="">Selecione o Género...</option>
+                                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                        <input type="url" value={newArtist.cover} onChange={e => setNewArtist({...newArtist, cover: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="URL da Imagem da Capa" />
+                                        <div className="flex gap-2">
+                                            <button type="submit" className="flex-1 bg-emerald-500 text-slate-950 font-bold p-3 rounded-lg">{editingArtistId ? 'Atualizar' : 'Gravar'}</button>
+                                            {editingArtistId && <button type="button" onClick={() => {setEditingArtistId(null); setNewArtist({name:'',cover:'',genre:''})}} className="bg-slate-700 text-white font-bold p-3 rounded-lg">Cancelar</button>}
+                                        </div>
+                                    </form>
+                                </div>
+                                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-h-[600px] overflow-y-auto">
+                                    <h3 className="text-xl font-bold mb-4">Artistas Existentes ({db.artists.length})</h3>
+                                    <div className="flex flex-col gap-2">
+                                        {db.artists.map(a => (
+                                            <div key={a.id} className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
+                                                <div><p className="font-bold text-white">{a.name}</p></div>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => editArtist(a)} className="text-blue-400 p-2 bg-slate-900 rounded"><i className="ph ph-pencil"></i></button>
+                                                    <button onClick={() => deleteArtist(a.id)} className="text-red-500 p-2 bg-slate-900 rounded"><i className="ph ph-trash"></i></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* LINKS DE ÁUDIO */}
-                        <div className="flex flex-col sm:flex-row gap-4 mt-8 print-hidden">
-                            {activeSong.flacLink && (
-                                <a href={activeSong.flacLink} target="_blank" rel="noreferrer" 
-                                className="flex items-center justify-center gap-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-4 rounded-xl font-bold transition-all shadow-lg flex-1">
-                                    <i className="ph-fill ph-file-audio text-2xl text-blue-400"></i> Baixar Áudio FLAC
-                                </a>
-                            )}
-                            {activeSong.backingTrackLink && (
-                                <a href={activeSong.backingTrackLink} target="_blank" rel="noreferrer" 
-                                className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-bold transition-all shadow-lg flex-1">
-                                    <i className="ph-fill ph-headphones text-2xl"></i> Backing Track (MP3)
-                                </a>
-                            )}
-                        </div>
-
-                        {/* SEÇÃO DE COMENTÁRIOS */}
-                        <div className="mt-16 bg-slate-900 border border-slate-800 p-6 rounded-xl print-hidden shadow-xl">
-                            <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-                                <i className="ph-fill ph-chats text-blue-500"></i> Comentários
-                            </h3>
-
-                            {/* Formulário */}
-                            <form onSubmit={submitComment} className="mb-8 bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                <div className="mb-4">
-                                    <label className="block text-sm font-bold text-slate-400 mb-2">Seu Nome (Visível publicamente)</label>
-                                    <input 
-                                        type="text" 
-                                        value={guestName}
-                                        onChange={e => setGuestName(e.target.value)}
-                                        placeholder="Ex: João Silva" 
-                                        className="w-full md:w-1/2 bg-slate-900 border border-slate-600 text-white rounded p-3 focus:outline-none focus:border-blue-500"
-                                    />
-                                </div>
-                                <div className="mb-4">
-                                    <label className="block text-sm font-bold text-slate-400 mb-2">Comentário</label>
-                                    <textarea 
-                                        value={newComment}
-                                        onChange={e => setNewComment(e.target.value)}
-                                        placeholder="O que achou da cifra ou da música?" 
-                                        className="w-full bg-slate-900 border border-slate-600 text-white rounded p-3 h-24 focus:outline-none focus:border-blue-500 resize-none"
-                                    ></textarea>
-                                </div>
-                                <button type="submit" disabled={!newComment.trim()} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-bold transition-colors">
-                                    Enviar Comentário
-                                </button>
-                            </form>
-
-                            {/* Lista de Comentários */}
-                            <div className="space-y-4">
-                                {comments.length === 0 ? (
-                                    <p className="text-slate-500 text-center py-4">Seja o primeiro a comentar nesta música!</p>
-                                ) : (
-                                    comments.map(c => (
-                                        <div key={c.id} className="bg-slate-800 p-4 rounded-lg border border-slate-700/50 flex gap-4">
-                                            <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 shrink-0 font-bold uppercase">
-                                                {c.author ? c.author.charAt(0) : 'V'}
-                                            </div>
-                                            <div>
-                                                <div className="flex items-baseline gap-2 mb-1">
-                                                    <span className="font-bold text-white">{c.author || 'Visitante'}</span>
-                                                    <span className="text-xs text-slate-500">
-                                                        {c.createdAt ? new Date(c.createdAt.toMillis()).toLocaleDateString('pt-PT') : 'Agora'}
-                                                    </span>
-                                                </div>
-                                                <p className="text-slate-300 text-sm whitespace-pre-wrap">{c.text}</p>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
-
-                    </div>
-                );
-            };
-
-            const renderLogin = () => (
-                <div className="animate-fade-in container mx-auto px-4 py-20 max-w-md">
-                    <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-xl text-center">
-                        <i className="ph-fill ph-lock-key text-5xl text-blue-500 mb-4 inline-block"></i>
-                        <h2 className="text-2xl font-black text-white mb-6">Área Administrativa</h2>
-                        
-                        <form onSubmit={(e) => {
-                            e.preventDefault();
-                            if (adminPassword === 'admin123') { // Senha padrão simples
-                                setIsAdmin(true);
-                                setView('admin');
-                                setLoginError('');
-                            } else {
-                                setLoginError('Senha incorreta.');
-                            }
-                        }}>
-                            <input 
-                                type="password" 
-                                placeholder="Digite a senha (admin123)" 
-                                value={adminPassword}
-                                onChange={e => setAdminPassword(e.target.value)}
-                                className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-3 mb-4 focus:outline-none focus:border-blue-500 text-center"
-                            />
-                            {loginError && <p className="text-rose-500 text-sm mb-4">{loginError}</p>}
-                            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition-colors">
-                                Entrar
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            );
-
-            const renderAdmin = () => (
-                <div className="animate-fade-in container mx-auto px-4 py-8 max-w-6xl">
-                    <div className="flex justify-between items-center mb-8">
-                        <h2 className="text-3xl font-black text-white flex items-center gap-2">
-                            <i className="ph-fill ph-gear text-blue-500"></i> Painel Admin
-                        </h2>
-                        <button onClick={() => { setIsAdmin(false); setAdminPassword(''); setView('home'); }} className="text-slate-400 hover:text-rose-500 transition-colors flex items-center gap-1">
-                            <i className="ph ph-sign-out"></i> Sair
-                        </button>
-                    </div>
-
-                    {toast && (
-                        <div className="bg-emerald-500/20 border border-emerald-500 text-emerald-400 p-4 rounded-lg mb-8 flex justify-between items-center animate-fade-in">
-                            <span>{toast}</span>
-                            <button onClick={() => setToast('')}><i className="ph ph-x"></i></button>
-                        </div>
-                    )}
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        {/* Add Artist */}
-                        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-lg h-fit">
-                            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><i className="ph-fill ph-user-plus text-blue-400"></i> Novo Artista</h3>
-                            <form onSubmit={async (e) => {
-                                e.preventDefault();
-                                try {
-                                    await addDoc(collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists'), {
-                                        name: newArtistName,
-                                        cover: newArtistCover
-                                    });
-                                    setNewArtistName(''); setNewArtistCover('');
-                                    setToast('Artista adicionado com sucesso!');
-                                } catch (err) { setToast('Erro ao adicionar artista: ' + err.message); }
-                            }}>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm text-slate-400 mb-1">Nome do Artista</label>
-                                        <input required type="text" value={newArtistName} onChange={e=>setNewArtistName(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-slate-400 mb-1">URL da Foto de Capa</label>
-                                        <input type="url" value={newArtistCover} onChange={e=>setNewArtistCover(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
-                                    </div>
-                                    <button type="submit" className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded transition-colors">Salvar Artista</button>
-                                </div>
-                            </form>
-                        </div>
-
-                        {/* Add Song */}
-                        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-lg">
-                            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><i className="ph-fill ph-music-notes-plus text-blue-400"></i> Nova Música</h3>
-                            <form onSubmit={async (e) => {
-                                e.preventDefault();
-                                try {
-                                    await addDoc(collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs'), {
-                                        title: newSongTitle,
-                                        artistId: newSongArtistId,
-                                        key: newSongKey,
-                                        bpm: newSongBpm,
-                                        cifra: newSongCifra,
-                                        flacLink: newSongFlac,
-                                        backingTrackLink: newSongBacking,
-                                        createdAt: serverTimestamp()
-                                    });
-                                    setNewSongTitle(''); setNewSongKey(''); setNewSongBpm(''); setNewSongCifra(''); setNewSongFlac(''); setNewSongBacking('');
-                                    setToast('Música adicionada com sucesso!');
-                                } catch (err) { setToast('Erro ao adicionar música: ' + err.message); }
-                            }}>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm text-slate-400 mb-1">Título da Música</label>
-                                        <input required type="text" value={newSongTitle} onChange={e=>setNewSongTitle(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-slate-400 mb-1">Artista</label>
-                                        <select required value={newSongArtistId} onChange={e=>setNewSongArtistId(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none">
-                                            <option value="">Selecione um artista...</option>
+                        {adminTab === 'songs' && (
+                            <div className="grid md:grid-cols-2 gap-8">
+                                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                                    <h3 className="text-xl font-bold mb-4">{editingSongId ? 'Editar Música' : 'Nova Música'}</h3>
+                                    <form onSubmit={handleSaveSong} className="flex flex-col gap-4">
+                                        <select required value={newSong.artistId} onChange={e => setNewSong({...newSong, artistId: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white">
+                                            <option value="">Selecione um Artista...</option>
                                             {db.artists.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                                         </select>
-                                    </div>
-                                    <div className="flex gap-4">
-                                        <div className="flex-1">
-                                            <label className="block text-sm text-slate-400 mb-1">Tom</label>
-                                            <input type="text" placeholder="Ex: G" value={newSongKey} onChange={e=>setNewSongKey(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
+                                        <input required type="text" value={newSong.title} onChange={e => setNewSong({...newSong, title: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Título" />
+                                        <input type="text" value={newSong.album} onChange={e => setNewSong({...newSong, album: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Álbum (Opcional)" />
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <input type="text" value={newSong.key} onChange={e => setNewSong({...newSong, key: e.target.value})} className="bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Tom Original (Ex: G)" />
+                                            <input type="text" value={newSong.bpm} onChange={e => setNewSong({...newSong, bpm: e.target.value})} className="bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="BPM" />
                                         </div>
-                                        <div className="flex-1">
-                                            <label className="block text-sm text-slate-400 mb-1">BPM</label>
-                                            <input type="text" placeholder="Ex: 120" value={newSongBpm} onChange={e=>setNewSongBpm(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
+                                        <input type="url" value={newSong.flacLink} onChange={e => setNewSong({...newSong, flacLink: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Link FLAC" />
+                                        <input type="url" value={newSong.backingTrackLink} onChange={e => setNewSong({...newSong, backingTrackLink: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Link Backing Tracks" />
+                                        <input type="url" value={newSong.youtubeLink} onChange={e => setNewSong({...newSong, youtubeLink: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Link YouTube" />
+                                        <textarea required rows="8" value={newSong.cifra} onChange={e => setNewSong({...newSong, cifra: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white font-mono text-sm" placeholder="<b>G</b>  <b>D</b>\nLetra..."></textarea>
+                                        <div className="flex gap-2">
+                                            <button type="submit" className="flex-1 bg-emerald-500 text-slate-950 font-bold p-3 rounded-lg">{editingSongId ? 'Atualizar' : 'Gravar'}</button>
+                                            {editingSongId && <button type="button" onClick={() => {setEditingSongId(null); setNewSong({artistId:'',title:'',album:'',key:'',bpm:'',flacLink:'',backingTrackLink:'',youtubeLink:'',cifra:''})}} className="bg-slate-700 text-white font-bold p-3 rounded-lg">Cancelar</button>}
                                         </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-slate-400 mb-1">Cifra (HTML com as tags &lt;b&gt; para acordes)</label>
-                                        <textarea required rows="4" placeholder="Ex: [Intro] <b>G</b>  <b>C</b>" value={newSongCifra} onChange={e=>setNewSongCifra(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none font-mono text-sm"></textarea>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-slate-400 mb-1">Link Áudio FLAC (Opcional)</label>
-                                        <input type="url" value={newSongFlac} onChange={e=>setNewSongFlac(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-slate-400 mb-1">Link Backing Track MP3 (Opcional)</label>
-                                        <input type="url" value={newSongBacking} onChange={e=>setNewSongBacking(e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 focus:border-blue-500 outline-none" />
-                                    </div>
-                                    <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded transition-colors">Salvar Música</button>
+                                    </form>
                                 </div>
-                            </form>
-                        </div>
+                                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-h-[800px] overflow-y-auto">
+                                    <h3 className="text-xl font-bold mb-4">Músicas ({db.songs.length})</h3>
+                                    <div className="flex flex-col gap-2">
+                                        {db.songs.map(s => {
+                                            const artist = db.artists.find(a => a.id === s.artistId);
+                                            return (
+                                                <div key={s.id} className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
+                                                    <div>
+                                                        <p className="font-bold text-white">{s.title}</p>
+                                                        <p className="text-xs text-slate-500">{artist?.name}</p>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => editSong(s)} className="text-blue-400 p-2 bg-slate-900 rounded"><i className="ph ph-pencil"></i></button>
+                                                        <button onClick={() => deleteSong(s.id)} className="text-red-500 p-2 bg-slate-900 rounded"><i className="ph ph-trash"></i></button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                </div>
-            );
-
-            if (loading) {
-                return <div className="min-h-screen flex items-center justify-center text-blue-500"><i className="ph-fill ph-spinner-gap animate-spin text-4xl"></i></div>;
+                );
             }
 
             return (
-                <div className="min-h-screen pb-20">
-                    <nav className="bg-slate-900 border-b border-slate-800 sticky top-0 z-50 print-hidden shadow-lg">
-                        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-                            <div onClick={goHome} className="flex items-center gap-2 cursor-pointer group">
-                                <i className="ph-fill ph-microphone-stage text-2xl text-blue-500 group-hover:scale-110 transition-transform"></i>
-                                <span className="font-black text-xl text-white tracking-tight">K-Cifra</span>
+                <div className="min-h-screen flex flex-col">
+                    <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 print-hidden">
+                        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between">
+                            <div className="flex items-center gap-3 cursor-pointer" onClick={goHome}>
+                                <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center text-slate-950">
+                                    <i className="ph-fill ph-microphone-stage text-2xl"></i>
+                                </div>
+                                <div><h1 className="text-xl font-black text-slate-100">Karaoke<span className="text-emerald-500">Cifra</span></h1></div>
                             </div>
-                            
-                            <button onClick={() => setView(isAdmin ? 'admin' : 'login')} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
-                                <i className="ph-fill ph-lock-key"></i> <span className="hidden md:inline">Admin</span>
-                            </button>
+                            <div className="flex items-center gap-4">
+                                <div className="hidden md:flex relative">
+                                    <i className="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                                    <input type="text" placeholder="Procurar artista..." value={search} onChange={(e) => { setSearch(e.target.value); if(view !== 'home' && view !== 'admin') goHome(); }} className="bg-slate-900 border border-slate-700 rounded-full py-2 pl-10 pr-4 text-sm text-slate-200 focus:border-emerald-500 w-64" />
+                                </div>
+                                <button onClick={() => setShowPix(true)} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-full font-bold text-sm">
+                                    <i className="ph-fill ph-hands-clapping"></i> Ajudar Canal
+                                </button>
+                                <button onClick={goAdmin} className="flex items-center justify-center w-10 h-10 bg-slate-900 border border-slate-700 rounded-full text-slate-400 hover:text-emerald-400">
+                                    <i className="ph-fill ph-gear text-xl"></i>
+                                </button>
+                            </div>
                         </div>
-                    </nav>
-                    
-                    <main>
+                    </header>
+
+                    <main className="max-w-6xl mx-auto w-full px-4 py-8 flex-grow">
                         {view === 'home' && renderHome()}
                         {view === 'artist' && renderArtist()}
-                        {view === 'song' && renderSong()}
-                        {view === 'login' && renderLogin()}
+                        {view === 'song' && <SongView song={activeSong} artist={activeArtist} />}
+                        {view === 'admin-login' && renderAdminLogin()}
                         {view === 'admin' && renderAdmin()}
                     </main>
+
+                    {showPix && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 print-hidden">
+                            <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-md w-full relative text-center">
+                                <button onClick={() => setShowPix(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white"><i className="ph ph-x text-2xl"></i></button>
+                                <div className="w-16 h-16 bg-purple-600/20 text-purple-500 rounded-full flex items-center justify-center mx-auto mb-4"><i className="ph-fill ph-currency-circle-dollar text-3xl"></i></div>
+                                <h3 className="text-2xl font-black text-slate-100 mb-2">Apoie o Canal!</h3>
+                                <p className="text-slate-400 mb-6">O seu apoio ajuda a manter os ficheiros online.</p>
+                                <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl mb-6">
+                                    <p className="text-xs text-slate-500 font-bold mb-1">Chave PIX</p>
+                                    <p className="text-emerald-400 font-mono text-lg font-bold">seu-email@gmail.com</p>
+                                </div>
+                                <button onClick={() => { navigator.clipboard.writeText("seu-email@gmail.com"); alert("Copiada!"); }} className="w-full bg-purple-600 text-white font-bold py-3 rounded-xl">Copiar Chave</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
