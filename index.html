@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Karaoke com Cifra - O seu palco virtual</title>
+    <title>Karaoke com Cifra</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -20,34 +20,22 @@
 
     <style>
         body { background-color: #020617; color: #f8fafc; font-family: 'Inter', sans-serif; }
-        
-        /* Tipografia da Cifra */
         .cifra-text { font-family: 'Courier New', Courier, monospace; }
-        .cifra-text b { color: #34d399; font-weight: bold; font-size: 1.05em; }
         .cifra-text-bold { font-weight: bold; }
         
-        /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
-        /* Estilos para Impressão e Salvar PDF */
         @media print {
-            @page { margin: 1.5cm; }
             body { background-color: #fff !important; color: #000 !important; }
             .print-hidden { display: none !important; }
             .print-cifra-box { background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important; overflow: visible !important; }
             .cifra-text { color: #000 !important; white-space: pre-wrap !important; word-wrap: break-word !important; }
-            .cifra-text b { color: #000 !important; font-weight: 900 !important; font-size: 1.1em; }
             .print-only { display: block !important; }
-            .print-break-inside-avoid { break-inside: avoid; }
         }
         .print-only { display: none; }
-        
-        /* Grid das categorias */
-        .hide-scroll::-webkit-scrollbar { display: none; }
-        .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body>
@@ -55,15 +43,15 @@
 
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const { useState, useEffect } = React;
 
         // ==========================================
-        // CONFIGURAÇÃO DA NUVEM (FIREBASE)
+        // CONFIGURAÇÃO DA NUVEM (BANCO DE DADOS)
         // ==========================================
-        const firebaseConfig = {
+        const MINHAS_CHAVES_DE_NUVEM = {
             apiKey: "AIzaSyCXVoQvpKZW4Ta317aHDOebAVPYwbCDlUk",
             authDomain: "karaoke-cifra-app.firebaseapp.com",
             projectId: "karaoke-cifra-app",
@@ -72,20 +60,62 @@
             appId: "1:610450602429:web:5f2b81f9a486dff1a3fad4"
         }; 
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const dbFirestore = getFirestore(app);
+        let app, auth, dbFirestore, appId;
+        let isCloudConfigured = false;
 
-        // ==========================================
-        // DADOS AUXILIARES (CATEGORIAS)
-        // ==========================================
+        if (typeof __firebase_config !== 'undefined') {
+            app = initializeApp(JSON.parse(__firebase_config));
+            auth = getAuth(app);
+            dbFirestore = getFirestore(app);
+            appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            isCloudConfigured = true;
+        } else if (MINHAS_CHAVES_DE_NUVEM) {
+            app = initializeApp(MINHAS_CHAVES_DE_NUVEM);
+            auth = getAuth(app);
+            dbFirestore = getFirestore(app);
+            appId = 'karaoke-com-cifra-site'; 
+            isCloudConfigured = true;
+        }
+
         const CATEGORIAS = [
             "Sertanejo", "MPB", "Flashbacks", "Internacionais", "Pop Rock Nacional", 
             "Gospel/Religioso", "Rock Internacional", "Samba", "Pagode", "Bregas", 
             "Alternativo", "Hip Hop/Rap", "Axé", "Arrocha/Forró", "Blues", "Infantil", "Outros"
         ];
 
-        // Função para extrair ID do YouTube do Link
+        // Lógica de Transposição Musical
+        const SCALE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        
+        const transposeChord = (chordStr, steps) => {
+            if (steps === 0) return chordStr;
+            
+            // Divide o acorde por barras para tratar baixos (Ex: G/B)
+            return chordStr.split('/').map(part => {
+                // Regex para capturar a nota raiz (A-G e # ou b) e o resto do acorde (m, 7, etc)
+                const match = part.match(/^([A-G][#b]?)(.*)$/);
+                if (!match) return part; // Se não for acorde válido, ignora
+                
+                let note = match[1];
+                let suffix = match[2];
+
+                // Converte bemóis para sustenidos para facilitar a matemática na array SCALE
+                if (note === 'Db') note = 'C#';
+                if (note === 'Eb') note = 'D#';
+                if (note === 'Gb') note = 'F#';
+                if (note === 'Ab') note = 'G#';
+                if (note === 'Bb') note = 'A#';
+
+                let index = SCALE.indexOf(note);
+                if (index === -1) return part; // Se falhar, devolve original
+
+                // Calcula a nova posição
+                let newIndex = (index + steps) % 12;
+                if (newIndex < 0) newIndex += 12;
+
+                return SCALE[newIndex] + suffix;
+            }).join('/');
+        };
+
         const getYouTubeId = (url) => {
             if (!url) return null;
             const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
@@ -94,58 +124,70 @@
         };
 
         function App() {
-            // Estados da Nuvem
             const [user, setUser] = useState(null);
             const [db, setDb] = useState({ artists: [], songs: [] });
             const [loading, setLoading] = useState(true);
 
-            // Gestão de estado da UI
-            const [view, setView] = useState('home'); // home, category, artist, song, admin-login, admin
+            // UI
+            const [view, setView] = useState('home'); 
             const [activeArtist, setActiveArtist] = useState(null);
             const [activeSong, setActiveSong] = useState(null);
             const [activeCategory, setActiveCategory] = useState(null);
             const [search, setSearch] = useState('');
             const [showPix, setShowPix] = useState(false);
 
-            // Estados do Admin - VARIÁVEIS CORRIGIDAS (Top Level)
+            // Admin
             const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-            const [adminPin, setAdminPin] = useState('');
-            const [adminPinError, setAdminPinError] = useState(false);
             const [adminTab, setAdminTab] = useState('songs');
             
-            // Formulários com Álbum e Imagens
+            // Edição / Criação
+            const [editingArtistId, setEditingArtistId] = useState(null);
             const [newArtist, setNewArtist] = useState({ name: '', cover: '' });
+            
+            const [editingSongId, setEditingSongId] = useState(null);
             const [newSong, setNewSong] = useState({ artistId: '', album: '', category: 'Outros', title: '', key: '', bpm: '', flacLink: '', backingTrackLink: '', youtubeLink: '', cifra: '' });
 
-            // Estados de Formatação da Cifra
+            // Formatação da Cifra (Cifra Club Mode)
             const [cifraFontSize, setCifraFontSize] = useState(16);
             const [cifraColumns, setCifraColumns] = useState(1);
             const [cifraBold, setCifraBold] = useState(false);
+            const [transposeSteps, setTransposeSteps] = useState(0);
+            const [chordColor, setChordColor] = useState('#34d399'); // Default Verde Escuro/Ciano
 
-            // 1. Iniciar Autenticação Anônima
             useEffect(() => {
-                signInAnonymously(auth).catch(err => console.error("Erro auth:", err));
+                if (!isCloudConfigured) {
+                    setLoading(false);
+                    return;
+                }
+
+                const initAuth = async () => {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                };
+                initAuth();
+                
                 const unsubscribe = onAuthStateChanged(auth, setUser);
                 return () => unsubscribe();
             }, []);
 
-            // 2. Ouvir Firestore em Tempo Real
             useEffect(() => {
-                if (!user) return;
+                if (!user || !isCloudConfigured) return;
 
-                const artistsRef = collection(dbFirestore, 'artists');
-                const songsRef = collection(dbFirestore, 'songs');
+                const artistsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists');
+                const songsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs');
 
                 const unsubArtists = onSnapshot(artistsRef, (snapshot) => {
                     const artistsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    // Organiza os artistas por ordem alfabética
                     setDb(prev => ({ ...prev, artists: artistsData.sort((a,b) => a.name.localeCompare(b.name)) }));
                 });
 
-                const qSongs = query(songsRef, orderBy('createdAt', 'desc'));
-                const unsubSongs = onSnapshot(qSongs, (snapshot) => {
+                const unsubSongs = onSnapshot(songsRef, (snapshot) => {
                     const songsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setDb(prev => ({ ...prev, songs: songsData }));
+                    // Organizar por data de criação descrescente (Novidades)
+                    setDb(prev => ({ ...prev, songs: songsData.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)) }));
                     setLoading(false);
                 });
 
@@ -158,37 +200,23 @@
             const goArtist = (artist) => { setActiveArtist(artist); setView('artist'); window.scrollTo(0, 0); };
             const goSong = (song) => { 
                 setActiveSong(song); 
-                setCifraFontSize(16); setCifraColumns(1); setCifraBold(false); // reseta a formatação ao abrir nova
+                // Reset as ferramentas ao abrir nova música
+                setCifraFontSize(16); setCifraColumns(1); setCifraBold(false); setTransposeSteps(0);
                 setView('song'); window.scrollTo(0, 0); 
             };
-            const goAdmin = () => { 
-                if(isAdminAuthenticated) { setView('admin'); } 
-                else { setView('admin-login'); setAdminPin(''); setAdminPinError(false); }
-                window.scrollTo(0, 0); 
-            };
+            const goAdmin = () => { isAdminAuthenticated ? setView('admin') : setView('admin-login'); window.scrollTo(0, 0); };
 
-            // Filtragem da busca geral
             const filteredSongsBySearch = search 
                 ? db.songs.filter(s => s.title.toLowerCase().includes(search.toLowerCase()) || db.artists.find(a => a.id === s.artistId)?.name.toLowerCase().includes(search.toLowerCase()))
                 : [];
 
-            if (loading) {
-                return (
-                    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-emerald-500 gap-4">
-                        <i className="ph-fill ph-spinner-gap text-5xl animate-spin"></i>
-                        <h2 className="text-xl font-bold">Afinando os instrumentos...</h2>
-                    </div>
-                );
-            }
-
             const renderHome = () => {
-                const latestSongs = db.songs.slice(0, 6); // Pega as 6 mais recentes
+                const latestSongs = db.songs.slice(0, 6);
 
                 return (
                     <div className="animate-[fadeIn_0.5s_ease-out]">
-                        {/* Hero Section / Slogan */}
                         <div className="text-center py-12 md:py-16 px-4 mb-10 bg-gradient-to-br from-slate-900 to-slate-950 rounded-[3rem] border border-slate-800 shadow-2xl relative overflow-hidden">
-                            <div className="absolute top-[-20%] left-[-10%] text-emerald-500/5 rotate-12">
+                            <div className="absolute top-[-20%] left-[-10%] text-emerald-500/5 rotate-12 pointer-events-none">
                                 <i className="ph-fill ph-microphone-stage text-[300px]"></i>
                             </div>
                             <div className="relative z-10">
@@ -202,7 +230,6 @@
                             </div>
                         </div>
 
-                        {/* Search Results */}
                         {search && (
                             <div className="mb-12">
                                 <h3 className="text-2xl font-bold text-slate-100 mb-6 flex items-center gap-2"><i className="ph-fill ph-magnifying-glass text-emerald-500"></i> Resultados para "{search}"</h3>
@@ -226,7 +253,6 @@
                             </div>
                         )}
 
-                        {/* Novidades */}
                         {!search && (
                             <div className="mb-16">
                                 <h3 className="text-2xl font-bold text-slate-100 mb-6 flex items-center gap-2">
@@ -252,7 +278,6 @@
                             </div>
                         )}
 
-                        {/* Categorias / Gêneros */}
                         {!search && (
                             <div className="mb-16">
                                 <h3 className="text-2xl font-bold text-slate-100 mb-6 flex items-center gap-2">
@@ -261,7 +286,7 @@
                                 <div className="flex flex-wrap gap-3">
                                     {CATEGORIAS.map(cat => {
                                         const count = db.songs.filter(s => s.category === cat).length;
-                                        if (count === 0) return null; // Esconde categorias vazias na home
+                                        if (count === 0) return null;
                                         return (
                                             <button 
                                                 key={cat} 
@@ -276,7 +301,6 @@
                             </div>
                         )}
 
-                        {/* Todos os Artistas */}
                         {!search && (
                             <div>
                                 <h3 className="text-2xl font-bold text-slate-100 mb-6 flex items-center gap-2">
@@ -305,10 +329,9 @@
 
             const renderCategory = () => {
                 const songs = db.songs.filter(s => s.category === activeCategory);
-                
                 return (
                     <div className="animate-[fadeIn_0.3s_ease-out]">
-                        <button onClick={goHome} className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 mb-6 font-medium transition-colors">
+                        <button onClick={goHome} className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 mb-6 font-medium">
                             <i className="ph ph-arrow-left font-bold"></i> Voltar
                         </button>
                         
@@ -343,7 +366,7 @@
                 const songs = db.songs.filter(s => s.artistId === activeArtist.id);
                 return (
                     <div className="animate-[fadeIn_0.3s_ease-out]">
-                        <button onClick={goHome} className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 mb-6 font-medium transition-colors">
+                        <button onClick={goHome} className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 mb-6 font-medium">
                             <i className="ph ph-arrow-left font-bold"></i> Voltar
                         </button>
 
@@ -396,15 +419,27 @@
                 const ytId = getYouTubeId(activeSong.youtubeLink);
                 const artist = db.artists.find(a => a.id === activeSong.artistId);
 
+                // Função que aplica a transposição na string HTML
+                const getProcessedCifraHtml = () => {
+                    if (!activeSong.cifra) return "";
+                    // Regex procura tudo dentro de <b> e </b>
+                    const regex = /<b>(.*?)<\/b>/g;
+                    return activeSong.cifra.replace(regex, (match, chordContent) => {
+                        const transposed = transposeChord(chordContent, transposeSteps);
+                        // Injeta a cor personalizada no atributo style
+                        return `<b style="color: ${chordColor}">${transposed}</b>`;
+                    });
+                };
+
                 return (
                     <div className="animate-[fadeIn_0.3s_ease-out] print-cifra-box">
                         <button onClick={() => goArtist(artist)} className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 mb-6 font-medium print-hidden transition-colors">
                             <i className="ph ph-arrow-left font-bold"></i> Voltar para {artist?.name}
                         </button>
 
-                        <div className="grid lg:grid-cols-3 gap-8 mb-8 print-hidden">
-                            {/* Bloco Info e Botões */}
-                            <div className="lg:col-span-2 bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-6 md:p-10 shadow-2xl relative overflow-hidden">
+                        <div className="grid lg:grid-cols-[1.2fr_1fr] gap-8 mb-8 print-hidden">
+                            {/* Bloco Info e Botões (Esquerda) */}
+                            <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden flex flex-col justify-center">
                                 <div className="absolute top-[-10%] right-[-5%] text-slate-800/30 rotate-12 pointer-events-none">
                                     <i className="ph-fill ph-speaker-hifi text-[250px]"></i>
                                 </div>
@@ -412,25 +447,26 @@
                                 <div className="relative z-10">
                                     <span className="bg-slate-800 text-emerald-400 text-xs font-bold px-3 py-1 rounded-full mb-4 inline-block border border-slate-700">{activeSong.category}</span>
                                     <h2 className="text-4xl md:text-5xl font-black text-slate-100 mb-2 leading-tight">{activeSong.title}</h2>
-                                    <p className="text-2xl text-emerald-500 mb-6 font-bold flex items-center gap-2">
-                                        {artist?.name} {activeSong.album && <span className="text-slate-400 font-normal text-lg bg-slate-900 px-3 py-1 rounded-lg border border-slate-700">💿 {activeSong.album}</span>}
+                                    <p className="text-2xl text-emerald-500 mb-6 font-bold flex flex-wrap items-center gap-2">
+                                        {artist?.name} 
+                                        {activeSong.album && <span className="text-slate-400 font-normal text-lg bg-slate-900 px-3 py-1 rounded-lg border border-slate-700">💿 {activeSong.album}</span>}
                                     </p>
                                     
-                                    <div className="flex gap-4 mb-8 text-sm text-slate-300">
-                                        <span className="bg-slate-950 px-4 py-2 rounded-lg border border-slate-800 flex items-center gap-2 shadow-inner"><i className="ph-fill ph-music-note text-emerald-500"></i> Tom: <b className="text-white">{activeSong.key || '?'}</b></span>
+                                    <div className="flex gap-4 mb-8 text-sm text-slate-300 flex-wrap">
+                                        <span className="bg-slate-950 px-4 py-2 rounded-lg border border-slate-800 flex items-center gap-2 shadow-inner"><i className="ph-fill ph-music-note text-emerald-500"></i> Tom Original: <b className="text-white">{activeSong.key || '?'}</b></span>
                                         <span className="bg-slate-950 px-4 py-2 rounded-lg border border-slate-800 flex items-center gap-2 shadow-inner"><i className="ph-fill ph-metronome text-emerald-500"></i> BPM: <b className="text-white">{activeSong.bpm || '?'}</b></span>
                                     </div>
                                     
-                                    <div className="flex flex-col sm:flex-row gap-4">
+                                    <div className="flex flex-col sm:flex-row gap-4 mt-auto">
                                         {activeSong.flacLink && (
                                             <a href={activeSong.flacLink} target="_blank" rel="noreferrer" 
-                                            className="flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-4 rounded-xl font-black transition-all transform hover:scale-[1.02] shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)] flex-1">
+                                            className="flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-4 rounded-xl font-black transition-all transform hover:scale-[1.02] shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)] flex-1 text-center">
                                                 <i className="ph-fill ph-file-audio text-2xl"></i> Baixar Áudio FLAC
                                             </a>
                                         )}
                                         {activeSong.backingTrackLink && (
                                             <a href={activeSong.backingTrackLink} target="_blank" rel="noreferrer" 
-                                            className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-black transition-all transform hover:scale-[1.02] shadow-[0_0_20px_-5px_rgba(37,99,235,0.4)] flex-1">
+                                            className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-black transition-all transform hover:scale-[1.02] shadow-[0_0_20px_-5px_rgba(37,99,235,0.4)] flex-1 text-center">
                                                 <i className="ph-fill ph-waveform text-2xl"></i> Baixar Backing Tracks
                                             </a>
                                         )}
@@ -438,12 +474,12 @@
                                 </div>
                             </div>
 
-                            {/* Bloco de Vídeo */}
-                            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col">
+                            {/* Bloco de Vídeo (Direita - Maior e mais equilibrado) */}
+                            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col h-full min-h-[300px]">
                                 <h3 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
                                     <i className="ph-fill ph-youtube-logo text-red-500 text-2xl"></i> Cover de Referência
                                 </h3>
-                                <div className="flex-grow bg-slate-950 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center relative aspect-video shadow-inner">
+                                <div className="flex-grow bg-slate-950 rounded-xl border border-slate-800 overflow-hidden relative shadow-inner w-full min-h-[250px]">
                                     {ytId ? (
                                         <iframe 
                                             src={`https://www.youtube.com/embed/${ytId}`} 
@@ -454,7 +490,7 @@
                                             className="absolute inset-0 w-full h-full"
                                         ></iframe>
                                     ) : (
-                                        <div className="text-center text-slate-600 p-4">
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 p-4">
                                             <i className="ph ph-video-camera-slash text-4xl mb-2"></i>
                                             <p className="text-sm">Nenhum vídeo cadastrado.</p>
                                         </div>
@@ -465,52 +501,72 @@
 
                         {/* Bloco da Cifra Formatada */}
                         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl print-cifra-box">
-                            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 border-b border-slate-800 pb-4 print-hidden">
+                            {/* Barra de Ferramentas (Estilo Cifra Club) */}
+                            <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 mb-6 border-b border-slate-800 pb-6 print-hidden">
                                 <div className="flex items-center gap-2">
                                     <i className="ph-fill ph-text-aa text-emerald-500 text-2xl"></i>
                                     <h3 className="text-2xl font-bold text-slate-100">Cifra e Letra</h3>
                                 </div>
                                 
-                                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                                    <div className="flex items-center bg-slate-950 border border-slate-700 rounded-lg overflow-hidden shadow-inner">
+                                <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto bg-slate-950/50 p-2 rounded-xl border border-slate-800">
+                                    
+                                    {/* Mudar Tom / Transposição */}
+                                    <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg overflow-hidden shadow-inner mr-2">
+                                        <div className="px-3 py-2 text-slate-400 text-xs font-bold bg-slate-800 border-r border-slate-700 uppercase">Tom</div>
+                                        <button onClick={() => setTransposeSteps(s => s - 1)} className="px-3 py-2 hover:bg-slate-800 text-slate-300 transition-colors border-r border-slate-700 font-bold" title="Baixar meio tom">-</button>
+                                        <div className="px-3 py-2 text-emerald-400 font-bold text-sm w-12 text-center" title="Passos de Transposição">{transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps === 0 ? 'Orig' : transposeSteps}</div>
+                                        <button onClick={() => setTransposeSteps(s => s + 1)} className="px-3 py-2 hover:bg-slate-800 text-slate-300 transition-colors border-l border-slate-700 font-bold" title="Subir meio tom">+</button>
+                                    </div>
+
+                                    {/* Cores dos Acordes */}
+                                    <div className="flex gap-1 border-r border-slate-700 pr-3 mr-1">
+                                        <button onClick={() => setChordColor('#34d399')} className={`w-6 h-6 rounded-full bg-[#34d399] border-2 ${chordColor === '#34d399' ? 'border-white scale-110' : 'border-transparent'} transition-transform`} title="Verde Original"></button>
+                                        <button onClick={() => setChordColor('#60a5fa')} className={`w-6 h-6 rounded-full bg-[#60a5fa] border-2 ${chordColor === '#60a5fa' ? 'border-white scale-110' : 'border-transparent'} transition-transform`} title="Azul"></button>
+                                        <button onClick={() => setChordColor('#f472b6')} className={`w-6 h-6 rounded-full bg-[#f472b6] border-2 ${chordColor === '#f472b6' ? 'border-white scale-110' : 'border-transparent'} transition-transform`} title="Rosa"></button>
+                                        <button onClick={() => setChordColor('#fbbf24')} className={`w-6 h-6 rounded-full bg-[#fbbf24] border-2 ${chordColor === '#fbbf24' ? 'border-white scale-110' : 'border-transparent'} transition-transform`} title="Amarelo"></button>
+                                    </div>
+
+                                    {/* Tamanho da Letra */}
+                                    <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg overflow-hidden shadow-inner">
                                         <button onClick={() => setCifraFontSize(f => Math.max(12, f - 2))} className="px-3 py-2 hover:bg-slate-800 text-slate-300 transition-colors border-r border-slate-700 font-bold" title="Diminuir texto">-A</button>
                                         <div className="px-3 py-2 text-slate-400 text-sm w-12 text-center">{cifraFontSize}px</div>
                                         <button onClick={() => setCifraFontSize(f => Math.min(32, f + 2))} className="px-3 py-2 hover:bg-slate-800 text-slate-300 transition-colors border-l border-slate-700 font-bold" title="Aumentar texto">+A</button>
                                     </div>
                                     
-                                    <button onClick={() => setCifraBold(!cifraBold)} className={`px-4 py-2 rounded-lg font-bold border transition-colors shadow-sm ${cifraBold ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-950 border-slate-700 hover:bg-slate-800 text-slate-300'}`} title="Negrito na Letra">
+                                    <button onClick={() => setCifraBold(!cifraBold)} className={`px-4 py-2 rounded-lg font-bold border transition-colors shadow-sm ${cifraBold ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-900 border-slate-700 hover:bg-slate-800 text-slate-300'}`} title="Negrito na Letra">
                                         <i className="ph-bold ph-text-b"></i>
                                     </button>
 
-                                    <button onClick={() => setCifraColumns(c => c === 1 ? 2 : 1)} className="px-4 py-2 rounded-lg font-bold border border-slate-700 bg-slate-950 hover:bg-slate-800 text-slate-300 transition-colors flex items-center gap-2 shadow-sm" title="Dividir em Colunas">
+                                    <button onClick={() => setCifraColumns(c => c === 1 ? 2 : 1)} className="px-4 py-2 rounded-lg font-bold border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 transition-colors flex items-center gap-2 shadow-sm" title="Dividir em Colunas">
                                         <i className={cifraColumns === 1 ? "ph-fill ph-columns" : "ph-fill ph-square-half"}></i> 
                                         <span className="hidden sm:inline">{cifraColumns === 1 ? '2 Colunas' : '1 Coluna'}</span>
                                     </button>
                                     
-                                    <button onClick={() => window.print()} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg">
+                                    <button onClick={() => window.print()} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg ml-auto xl:ml-0">
                                         <i className="ph-bold ph-printer text-lg"></i> Imprimir/PDF
                                     </button>
                                 </div>
                             </div>
                             
                             <div className="bg-[#0f172a] p-6 rounded-xl border border-slate-800 overflow-x-auto print-cifra-box shadow-inner">
+                                {/* Cabeçalho Exclusivo para PDF/Impressão */}
                                 <div className="print-only mb-8 border-b-2 border-slate-800 pb-4">
                                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                                         <div>
                                             <h1 style={{fontSize: '28px', margin: 0, fontWeight: 900}}>{activeSong.title}</h1>
                                             <h2 style={{fontSize: '18px', margin: '4px 0 10px 0', color: '#333'}}>{artist?.name} {activeSong.album ? `(${activeSong.album})` : ''}</h2>
                                         </div>
-                                        <div style={{textAlign: 'right', color: '#10b981', fontWeight: 'bold'}}>
-                                            Karaoke com Cifra
+                                        <div style={{textAlign: 'right', color: '#10b981', fontWeight: 'bold', fontSize: '18px'}}>
+                                            <span style={{color: '#000'}}>Karaoke</span>Cifra
                                         </div>
                                     </div>
-                                    <p style={{fontSize: '14px', margin: 0}}>Tom: <b>{activeSong.key}</b> &nbsp;&nbsp;&nbsp; BPM: <b>{activeSong.bpm}</b> &nbsp;&nbsp;&nbsp; Categoria: <b>{activeSong.category}</b></p>
+                                    <p style={{fontSize: '14px', margin: 0}}>Tom Original: <b>{activeSong.key}</b> &nbsp;&nbsp;&nbsp; Transposição: <b>{transposeSteps > 0 ? `+${transposeSteps}` : transposeSteps}</b> &nbsp;&nbsp;&nbsp; BPM: <b>{activeSong.bpm}</b></p>
                                 </div>
 
                                 <pre 
                                     className={`cifra-text text-slate-300 leading-relaxed ${cifraBold ? 'cifra-text-bold' : ''}`}
                                     style={{ fontSize: `${cifraFontSize}px`, columnCount: cifraColumns, columnGap: '40px' }}
-                                    dangerouslySetInnerHTML={{ __html: activeSong.cifra }}
+                                    dangerouslySetInnerHTML={{ __html: getProcessedCifraHtml() }}
                                 />
                             </div>
                         </div>
@@ -519,15 +575,17 @@
             };
 
             const renderAdminLogin = () => {
-                // Bug fix: As variáveis (pin e erro) agora estão no topo do App() e as funções foram reescritas para os usar!
+                const [pin, setPin] = useState('');
+                const [error, setError] = useState(false);
+
                 const handleLogin = (e) => {
                     e.preventDefault();
-                    if (adminPin === '1511Kcc') { 
+                    if (pin === '1511Kcc') { 
                         setIsAdminAuthenticated(true);
                         setView('admin');
                     } else {
-                        setAdminPinError(true);
-                        setAdminPin('');
+                        setError(true);
+                        setPin('');
                     }
                 };
 
@@ -544,13 +602,13 @@
                                     <label className="block text-sm text-slate-400 mb-1">Palavra-passe de Gestor</label>
                                     <input 
                                         type="password" 
-                                        value={adminPin} 
-                                        onChange={e => {setAdminPin(e.target.value); setAdminPinError(false);}} 
-                                        className={`w-full bg-slate-950 border ${adminPinError ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-center tracking-widest text-lg text-slate-200 focus:border-emerald-500 outline-none transition-colors`} 
+                                        value={pin} 
+                                        onChange={e => {setPin(e.target.value); setError(false);}} 
+                                        className={`w-full bg-slate-950 border ${error ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-center tracking-widest text-lg text-slate-200 focus:border-emerald-500 outline-none transition-colors`} 
                                         placeholder="•••••••"
                                         autoFocus
                                     />
-                                    {adminPinError && <p className="text-red-500 text-xs mt-2 text-center">Palavra-passe incorreta.</p>}
+                                    {error && <p className="text-red-500 text-xs mt-2 text-center">Palavra-passe incorreta.</p>}
                                 </div>
                                 <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-3 rounded-xl transition-transform hover:scale-[1.02] shadow-lg">
                                     Entrar no Painel
@@ -565,7 +623,8 @@
             };
 
             const renderAdmin = () => {
-                // Função Inteligente para Upload de Imagem (Converte a foto numa string para caber na base de dados)
+                
+                // Helper para Upload e Recorte de Capa Quadrada do Artista
                 const handleImageUpload = (e) => {
                     const file = e.target.files[0];
                     if (!file) return;
@@ -575,12 +634,11 @@
                         const img = new Image();
                         img.onload = () => {
                             const canvas = document.createElement('canvas');
-                            const size = 500; // Tamanho fixo e quadrado para otimização
+                            const size = 500; 
                             canvas.width = size;
                             canvas.height = size;
                             const ctx = canvas.getContext('2d');
                             
-                            // Lógica de Recorte (Crop)
                             const minSize = Math.min(img.width, img.height);
                             const startX = (img.width - minSize) / 2;
                             const startY = (img.height - minSize) / 2;
@@ -594,45 +652,80 @@
                     reader.readAsDataURL(file);
                 };
 
-                const handleAddArtist = async (e) => {
+                // Handlers ARTISTA
+                const handleAddOrUpdateArtist = async (e) => {
                     e.preventDefault();
-                    if (!user) return alert("Erro: Nuvem desconectada. Tente recarregar a página.");
+                    if (!user) return alert("Erro: Nuvem desconectada. Recarregue a página.");
 
                     try {
-                        const artistData = { ...newArtist, createdAt: new Date().getTime() };
-                        await addDoc(collection(dbFirestore, 'artists'), artistData);
-                        setNewArtist({ name: '', cover: '' });
-                        alert('Artista salvo na nuvem com sucesso!');
+                        if (editingArtistId) {
+                            const artistRef = doc(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists', editingArtistId);
+                            await updateDoc(artistRef, newArtist);
+                            alert('Artista atualizado com sucesso!');
+                        } else {
+                            const artistData = { ...newArtist, createdAt: new Date().getTime() };
+                            await addDoc(collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists'), artistData);
+                            alert('Artista salvo na nuvem com sucesso!');
+                        }
+                        setNewArtist({ name: '', cover: '', genre: '' });
+                        setEditingArtistId(null);
                     } catch(err) {
                         console.error(err);
                         alert('Erro ao salvar.');
                     }
                 };
 
-                const handleAddSong = async (e) => {
+                const editArtist = (artist) => {
+                    setNewArtist({ name: artist.name, cover: artist.cover || '', genre: artist.genre || '' });
+                    setEditingArtistId(artist.id);
+                    setAdminTab('artists');
+                    window.scrollTo(0, 0);
+                };
+
+                const handleDeleteArtist = async (id) => {
+                    if(!confirm('Apagar artista permanentemente da nuvem?')) return;
+                    try { await deleteDoc(doc(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists', id)); } catch (err) { console.error(err); }
+                };
+
+                // Handlers MÚSICA
+                const handleAddOrUpdateSong = async (e) => {
                     e.preventDefault();
                     if (!newSong.artistId) return alert('Selecione um Artista!');
                     if (!user) return alert("Nuvem desconectada!");
 
                     try {
-                        const songData = { ...newSong, createdAt: new Date().getTime() };
-                        await addDoc(collection(dbFirestore, 'songs'), songData);
+                        if (editingSongId) {
+                            const songRef = doc(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs', editingSongId);
+                            await updateDoc(songRef, newSong);
+                            alert('Música atualizada com sucesso!');
+                        } else {
+                            const songData = { ...newSong, createdAt: new Date().getTime() };
+                            await addDoc(collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs'), songData);
+                            alert('Música salva na nuvem com sucesso!');
+                        }
                         setNewSong({ artistId: '', album: '', category: 'Outros', title: '', key: '', bpm: '', flacLink: '', backingTrackLink: '', youtubeLink: '', cifra: '' });
-                        alert('Música salva na nuvem com sucesso!');
+                        setEditingSongId(null);
                     } catch(err) {
                         console.error(err);
                         alert('Erro ao salvar música.');
                     }
                 };
 
-                const handleDeleteArtist = async (id) => {
-                    if(!confirm('Apagar artista permanentemente da nuvem?')) return;
-                    try { await deleteDoc(doc(dbFirestore, 'artists', id)); } catch (err) { console.error(err); }
+                const editSong = (song) => {
+                    setNewSong({
+                        artistId: song.artistId, album: song.album || '', category: song.category || 'Outros', 
+                        title: song.title, key: song.key || '', bpm: song.bpm || '', 
+                        flacLink: song.flacLink || '', backingTrackLink: song.backingTrackLink || '', 
+                        youtubeLink: song.youtubeLink || '', cifra: song.cifra || ''
+                    });
+                    setEditingSongId(song.id);
+                    setAdminTab('songs');
+                    window.scrollTo(0, 0);
                 };
 
                 const handleDeleteSong = async (id) => {
                     if(!confirm('Apagar música da nuvem?')) return;
-                    try { await deleteDoc(doc(dbFirestore, 'songs', id)); } catch (err) { console.error(err); }
+                    try { await deleteDoc(doc(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs', id)); } catch (err) { console.error(err); }
                 };
 
                 return (
@@ -654,10 +747,13 @@
 
                         {/* Músicas */}
                         {adminTab === 'songs' && (
-                            <div className="grid lg:grid-cols-2 gap-8">
+                            <div className="grid lg:grid-cols-[1.5fr_1fr] gap-8">
                                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
-                                    <h3 className="text-xl font-bold mb-6 text-emerald-400 border-b border-slate-800 pb-2">Cadastrar Música</h3>
-                                    <form onSubmit={handleAddSong} className="flex flex-col gap-5">
+                                    <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-2">
+                                        <h3 className="text-xl font-bold text-emerald-400">{editingSongId ? 'Editar Música' : 'Cadastrar Música'}</h3>
+                                        {editingSongId && <button onClick={() => {setEditingSongId(null); setNewSong({ artistId: '', album: '', category: 'Outros', title: '', key: '', bpm: '', flacLink: '', backingTrackLink: '', youtubeLink: '', cifra: '' });}} className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-300 hover:text-white">Cancelar Edição</button>}
+                                    </div>
+                                    <form onSubmit={handleAddOrUpdateSong} className="flex flex-col gap-5">
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-sm font-bold text-slate-400 mb-1">Artista</label>
@@ -667,7 +763,7 @@
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-bold text-slate-400 mb-1">Categoria (Menu)</label>
+                                                <label className="block text-sm font-bold text-slate-400 mb-1">Categoria</label>
                                                 <select required value={newSong.category} onChange={e => setNewSong({...newSong, category: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 outline-none focus:border-emerald-500 transition-colors">
                                                     {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
                                                 </select>
@@ -685,7 +781,7 @@
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-sm font-bold text-slate-400 mb-1">Tom</label>
+                                                <label className="block text-sm font-bold text-slate-400 mb-1">Tom Original</label>
                                                 <input type="text" value={newSong.key} onChange={e => setNewSong({...newSong, key: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 transition-colors outline-none" placeholder="Ex: G" />
                                             </div>
                                             <div>
@@ -712,9 +808,9 @@
                                                 <span>Cifra em HTML</span>
                                                 <span className="text-xs font-normal text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded">Use &lt;b&gt;Acorde&lt;/b&gt;</span>
                                             </label>
-                                            <textarea required rows="10" value={newSong.cifra} onChange={e => setNewSong({...newSong, cifra: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-emerald-400 font-mono text-sm leading-relaxed focus:border-emerald-500 outline-none shadow-inner" placeholder="Tom: <b>G</b>\n\n<b>G</b>                <b>D</b>\nLetra da música aqui"></textarea>
+                                            <textarea required rows="10" value={newSong.cifra} onChange={e => setNewSong({...newSong, cifra: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-emerald-400 font-mono text-sm leading-relaxed focus:border-emerald-500 outline-none shadow-inner" placeholder="Tom: <b>G</b>\n\nIntro: <b>G</b>  <b>D</b>\n\n<b>G</b>                <b>D</b>\nLetra da música aqui"></textarea>
                                         </div>
-                                        <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black p-4 rounded-xl shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-transform hover:scale-[1.02] mt-2">Salvar Música na Nuvem</button>
+                                        <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black p-4 rounded-xl shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-transform hover:scale-[1.02] mt-2">{editingSongId ? 'Atualizar Música' : 'Salvar Música na Nuvem'}</button>
                                     </form>
                                 </div>
                                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col shadow-xl">
@@ -728,9 +824,14 @@
                                                         <p className="font-bold text-slate-200 text-lg">{s.title}</p>
                                                         <p className="text-sm text-slate-500">{artist?.name} <span className="mx-2">•</span> <span className="text-emerald-500/70">{s.category}</span> {s.album && <span>• 💿 {s.album}</span>}</p>
                                                     </div>
-                                                    <button onClick={() => handleDeleteSong(s.id)} className="text-slate-600 hover:text-red-500 p-2 transition-colors">
-                                                        <i className="ph-fill ph-trash text-xl"></i>
-                                                    </button>
+                                                    <div className="flex gap-1">
+                                                        <button onClick={() => editSong(s)} className="text-slate-600 hover:text-blue-400 p-2 transition-colors" title="Editar">
+                                                            <i className="ph-fill ph-pencil-simple text-xl"></i>
+                                                        </button>
+                                                        <button onClick={() => handleDeleteSong(s.id)} className="text-slate-600 hover:text-red-500 p-2 transition-colors" title="Apagar">
+                                                            <i className="ph-fill ph-trash text-xl"></i>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             );
                                         })}
@@ -744,17 +845,26 @@
                         {adminTab === 'artists' && (
                             <div className="grid md:grid-cols-2 gap-8">
                                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
-                                    <h3 className="text-xl font-bold mb-4 border-b border-slate-800 pb-2 text-emerald-400">Novo Artista</h3>
-                                    <form onSubmit={handleAddArtist} className="flex flex-col gap-5">
+                                    <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-2">
+                                        <h3 className="text-xl font-bold text-emerald-400">{editingArtistId ? 'Editar Artista' : 'Novo Artista'}</h3>
+                                        {editingArtistId && <button onClick={() => {setEditingArtistId(null); setNewArtist({ name: '', cover: '', genre: '' });}} className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-300 hover:text-white">Cancelar Edição</button>}
+                                    </div>
+                                    <form onSubmit={handleAddOrUpdateArtist} className="flex flex-col gap-5">
                                         <div>
                                             <label className="block text-sm text-slate-400 mb-1 font-bold">Nome do Artista/Banda</label>
                                             <input required type="text" value={newArtist.name} onChange={e => setNewArtist({...newArtist, name: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none transition-colors" placeholder="Ex: Roupa Nova" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-1 font-bold">Gênero Principal</label>
+                                            <select required value={newArtist.genre} onChange={e => setNewArtist({...newArtist, genre: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 outline-none focus:border-emerald-500 transition-colors">
+                                                <option value="">Selecione...</option>
+                                                {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
                                         </div>
                                         
                                         <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 shadow-inner">
                                             <label className="block text-sm text-slate-400 mb-3 font-bold"><i className="ph-fill ph-image"></i> Imagem do Artista</label>
                                             
-                                            {/* Opção Inteligente de Upload Recortado */}
                                             <div className="mb-4">
                                                 <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-700 border-dashed rounded-lg cursor-pointer hover:bg-slate-800/50 hover:border-emerald-500 transition-colors">
                                                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
@@ -771,7 +881,6 @@
                                                 <input type="url" value={newArtist.cover} onChange={e => setNewArtist({...newArtist, cover: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none text-sm" placeholder="https://..." />
                                             </div>
 
-                                            {/* Preview */}
                                             {newArtist.cover && (
                                                 <div className="mt-4 flex items-center justify-center gap-4 border-t border-slate-800 pt-4">
                                                     <p className="text-sm text-emerald-500 font-bold">Preview:</p>
@@ -780,7 +889,7 @@
                                             )}
                                         </div>
 
-                                        <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-4 rounded-xl shadow-lg mt-2 transition-transform hover:scale-[1.02]">Salvar Artista na Nuvem</button>
+                                        <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-4 rounded-xl shadow-lg mt-2 transition-transform hover:scale-[1.02]">{editingArtistId ? 'Atualizar Artista' : 'Salvar Artista na Nuvem'}</button>
                                     </form>
                                 </div>
                                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
@@ -790,11 +899,19 @@
                                             <div key={a.id} className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center group">
                                                 <div className="flex items-center gap-4">
                                                     {a.cover ? <img src={a.cover} className="w-12 h-12 rounded-full object-cover border border-slate-700 shadow-md" /> : <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center"><i className="ph-fill ph-user text-slate-500"></i></div>}
-                                                    <p className="font-bold text-slate-200 text-lg">{a.name}</p>
+                                                    <div>
+                                                        <p className="font-bold text-slate-200 text-lg">{a.name}</p>
+                                                        <p className="text-xs text-slate-500">{a.genre}</p>
+                                                    </div>
                                                 </div>
-                                                <button onClick={() => handleDeleteArtist(a.id)} className="text-slate-600 hover:text-red-500 p-2 transition-colors">
-                                                    <i className="ph-fill ph-trash text-xl"></i>
-                                                </button>
+                                                <div className="flex gap-1">
+                                                    <button onClick={() => editArtist(a)} className="text-slate-600 hover:text-blue-400 p-2 transition-colors">
+                                                        <i className="ph-fill ph-pencil-simple text-xl"></i>
+                                                    </button>
+                                                    <button onClick={() => handleDeleteArtist(a.id)} className="text-slate-600 hover:text-red-500 p-2 transition-colors">
+                                                        <i className="ph-fill ph-trash text-xl"></i>
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                         {db.artists.length === 0 && <p className="text-slate-500 text-center py-10">Vazio.</p>}
