@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karaoke com Cifra</title>
+    
+    <!-- Tailwind CSS para o design -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Ícones Phosphor para um aspeto moderno -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- React e ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel para compilar o React no navegador -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Estilos base personalizados */
+        body { background-color: #020617; color: #f8fafc; font-family: 'Inter', sans-serif; }
+        .cifra-text { font-family: 'Courier New', Courier, monospace; }
+        /* Realce verde para a cifra */
+        .cifra-text b { color: #34d399; font-weight: bold; }
+        
+        /* Personalização do scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Estilos para Impressão e PDF */
+        @media print {
+            body { background-color: #fff !important; color: #000 !important; }
+            .print-hidden { display: none !important; }
+            .print-cifra-box { background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important; overflow: visible !important; }
+            .cifra-text { color: #000 !important; white-space: pre-wrap !important; word-wrap: break-word !important; }
+            .cifra-text b { color: #000 !important; font-weight: 900 !important; font-size: 1.1em; }
+            .print-only { display: block !important; }
+        }
+        .print-only { display: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        // ==========================================
+        // BASE DE DADOS SIMULADA (MOCK DATA)
+        // Adicione aqui os seus artistas e músicas
+        // ==========================================
+        const db = {
+            artists: [
+                { id: 'titas', name: 'Titãs', cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=500&q=80', genre: 'Rock' },
+                { id: 'legiao', name: 'Legião Urbana', cover: 'https://images.unsplash.com/photo-1526478806334-5fd488fcaabc?auto=format&fit=crop&w=500&q=80', genre: 'Rock Nacional' },
+                { id: 'roupanova', name: 'Roupa Nova', cover: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=500&q=80', genre: 'Pop/Romântico' }
+            ],
+            songs: [
+                {
+                    id: 'epitafio',
+                    artistId: 'titas',
+                    title: 'Epitáfio',
+                    key: 'G',
+                    bpm: '82',
+                    flacLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
+                    backingTrackLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
+                    cifra: `Tom: <b>G</b>
+
+Intro: <b>G</b>  <b>D/F#</b>  <b>Em</b>  <b>C</b> (2x)
+
+<b>G</b>             <b>D/F#</b>
+Devia ter amado mais
+          <b>Em</b>
+Ter chorado mais
+          <b>C</b>                 <b>G</b>
+Ter visto o sol nascer
+<b>G</b>             <b>D/F#</b>
+Devia ter arriscado mais
+        <b>Em</b>
+E até errado mais
+         <b>C</b>                 <b>G</b>
+Ter feito o que eu queria fazer`
+                },
+                {
+                    id: 'tempo-perdido',
+                    artistId: 'legiao',
+                    title: 'Tempo Perdido',
+                    key: 'C',
+                    bpm: '115',
+                    flacLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
+                    backingTrackLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
+                    cifra: `Tom: <b>C</b>
+
+Intro: <b>C</b>  <b>Am7</b>  <b>Bm</b>  <b>Em</b> (2x)
+
+<b>C</b>             <b>Am7</b>
+Todos os dias quando acordo
+<b>Bm</b>              <b>Em</b>
+Não tenho mais o tempo que passou
+<b>C</b>             <b>Am7</b>
+Mas tenho muito tempo
+<b>Bm</b>              <b>Em</b>
+Temos todo o tempo do mundo`
+                },
+                {
+                    id: 'whisky-a-go-go',
+                    artistId: 'roupanova',
+                    title: 'Whisky a Go-Go',
+                    key: 'A',
+                    bpm: '130',
+                    flacLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
+                    backingTrackLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
+                    cifra: `Tom: <b>A</b>
+
+Intro: <b>A</b>  <b>D</b>  <b>E</b> (4x)
+
+<b>A</b>              <b>D</b>           <b>E</b>
+Foi numa festa, gelo e cuba-libre
+<b>A</b>             <b>D</b>            <b>E</b>
+E na vitrola rolando um som
+<b>A</b>              <b>D</b>         <b>E</b>
+Que eu te vi dançar, linda`
+                }
+            ]
+        };
+
+        // ==========================================
+        // COMPONENTE PRINCIPAL (APLICAÇÃO)
+        // ==========================================
+        function App() {
+            // Gestão de estado para a navegação
+            const [view, setView] = useState('home'); // 'home', 'artist', 'song'
+            const [activeArtist, setActiveArtist] = useState(null);
+            const [activeSong, setActiveSong] = useState(null);
+            const [search, setSearch] = useState('');
+            const [showPix, setShowPix] = useState(false);
+
+            // Funções de navegação
+            const goHome = () => {
+                setView('home');
+                setActiveArtist(null);
+                setActiveSong(null);
+                window.scrollTo(0, 0);
+            };
+
+            const goArtist = (artist) => {
+                setActiveArtist(artist);
+                setView('artist');
+                window.scrollTo(0, 0);
+            };
+
+            const goSong = (song) => {
+                setActiveSong(song);
+                setView('song');
+                window.scrollTo(0, 0);
+            };
+
+            // Filtrar artistas na página inicial
+            const filteredArtists = db.artists.filter(a => 
+                a.name.toLowerCase().includes(search.toLowerCase())
+            );
+
+            // ==========================================
+            // VISTAS (VIEWS)
+            // ==========================================
+            
+            // 1. Vista Inicial (Lista de Artistas)
+            const renderHome = () => (
+                <div className="animate-[fadeIn_0.5s_ease-out]">
+                    <div className="text-center py-12 px-4 mb-8 bg-slate-900/50 rounded-3xl border border-slate-800">
+                        <h2 className="text-4xl md:text-6xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500">
+                            Karaoke com Cifra
+                        </h2>
+                        <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+                            O seu acervo definitivo de Cifras, faixas FLAC (sem perda) e Backing Tracks profissionais.
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-6">
+                        <i className="ph ph-microphone-stage text-2xl text-emerald-500"></i>
+                        <h3 className="text-2xl font-bold text-slate-100">Artistas</h3>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+                        {filteredArtists.map(artist => (
+                            <div 
+                                key={artist.id}
+                                onClick={() => goArtist(artist)}
+                                className="group cursor-pointer bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 hover:border-emerald-500/50 transition-all duration-300 hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.3)]"
+                            >
+                                <div className="aspect-square relative overflow-hidden">
+                                    <img 
+                                        src={artist.cover} 
+                                        alt={artist.name} 
+                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/20 to-transparent"></div>
+                                </div>
+                                <div className="p-4">
+                                    <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider">{artist.genre}</span>
+                                    <h4 className="font-bold text-xl text-slate-100 mt-1">{artist.name}</h4>
+                                    <p className="text-slate-500 text-sm mt-1">
+                                        {db.songs.filter(s => s.artistId === artist.id).length} músicas
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {filteredArtists.length === 0 && (
+                        <div className="text-center py-12 text-slate-500">
+                            Nenhum artista encontrado.
+                        </div>
+                    )}
+                </div>
+            );
+
+            // 2. Vista do Artista (Lista de Músicas)
+            const renderArtist = () => {
+                const songs = db.songs.filter(s => s.artistId === activeArtist.id);
+                
+                return (
+                    <div className="animate-[fadeIn_0.3s_ease-out]">
+                        <button onClick={goHome} className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 mb-6 font-medium">
+                            <i className="ph ph-arrow-left font-bold"></i> Voltar
+                        </button>
+
+                        <div className="flex flex-col md:flex-row gap-6 mb-10 items-center md:items-start">
+                            <img src={activeArtist.cover} alt={activeArtist.name} className="w-40 h-40 rounded-full object-cover border-4 border-slate-800 shadow-2xl" />
+                            <div className="text-center md:text-left pt-4">
+                                <h2 className="text-5xl font-black text-slate-100">{activeArtist.name}</h2>
+                                <p className="text-emerald-500 font-medium mt-2 text-lg">{activeArtist.genre}</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                            <div className="bg-slate-800/50 p-4 border-b border-slate-800">
+                                <h3 className="font-bold text-lg text-slate-200">Repertório</h3>
+                            </div>
+                            <div className="divide-y divide-slate-800/50">
+                                {songs.map(song => (
+                                    <div 
+                                        key={song.id} 
+                                        onClick={() => goSong(song)}
+                                        className="p-4 flex items-center justify-between hover:bg-slate-800/30 cursor-pointer group transition-colors"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-slate-900 transition-colors">
+                                                <i className="ph-fill ph-play"></i>
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-slate-200 text-lg">{song.title}</h4>
+                                                <p className="text-slate-500 text-sm">Tom: {song.key} • BPM: {song.bpm}</p>
+                                            </div>
+                                        </div>
+                                        <i className="ph ph-caret-right text-slate-600 group-hover:text-emerald-500"></i>
+                                    </div>
+                                ))}
+                                {songs.length === 0 && (
+                                    <div className="p-8 text-center text-slate-500">Sem músicas registadas.</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // 3. Vista da Música (Cifra e Botões)
+            const renderSong = () => (
+                <div className="animate-[fadeIn_0.3s_ease-out] print-cifra-box">
+                    <button onClick={() => goArtist(activeArtist)} className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 mb-6 font-medium print-hidden">
+                        <i className="ph ph-arrow-left font-bold"></i> Voltar para {activeArtist.name}
+                    </button>
+
+                    <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-6 md:p-10 mb-8 shadow-2xl relative overflow-hidden print-hidden">
+                        <div className="absolute top-[-20%] right-[-10%] text-slate-800/50">
+                            <i className="ph-fill ph-music-notes text-[250px]"></i>
+                        </div>
+                        
+                        <div className="relative z-10">
+                            <h2 className="text-4xl md:text-5xl font-black text-slate-100 mb-2">{activeSong.title}</h2>
+                            <p className="text-xl text-emerald-500 mb-6">{activeArtist.name}</p>
+                            
+                            <div className="flex flex-col md:flex-row gap-4">
+                                {/* Botão FLAC */}
+                                <a href={activeSong.flacLink} target="_blank" rel="noreferrer" 
+                                   className="flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-4 rounded-xl font-bold transition-all transform hover:scale-[1.02] shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)]">
+                                    <i className="ph-fill ph-file-audio text-2xl"></i>
+                                    Baixar Áudio FLAC
+                                </a>
+                                
+                                {/* Botão Backing Track */}
+                                <a href={activeSong.backingTrackLink} target="_blank" rel="noreferrer" 
+                                   className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-bold transition-all transform hover:scale-[1.02] shadow-[0_0_20px_-5px_rgba(37,99,235,0.4)]">
+                                    <i className="ph-fill ph-waveform text-2xl"></i>
+                                    Baixar Backing Tracks
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 print-cifra-box">
+                        <div className="flex items-center justify-between gap-2 mb-6 border-b border-slate-800 pb-4 print-hidden">
+                            <div className="flex items-center gap-2">
+                                <i className="ph-fill ph-text-aa text-emerald-500 text-2xl"></i>
+                                <h3 className="text-2xl font-bold text-slate-200">Cifra e Letra</h3>
+                            </div>
+                            
+                            <button 
+                                onClick={() => window.print()}
+                                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-sm font-bold transition-colors border border-slate-700 hover:border-emerald-500/50"
+                            >
+                                <i className="ph ph-printer text-lg"></i>
+                                Imprimir / PDF
+                            </button>
+                        </div>
+                        
+                        <div className="bg-[#0f172a] p-6 rounded-xl border border-slate-800 overflow-x-auto print-cifra-box">
+                            <div className="print-only mb-6 border-b border-gray-300 pb-4">
+                                <h1 className="text-3xl font-black mb-1">{activeSong.title}</h1>
+                                <h2 className="text-xl text-gray-700 mb-3">{activeArtist.name}</h2>
+                                <p className="text-sm">Tom: <b>{activeSong.key}</b> • BPM: <b>{activeSong.bpm}</b></p>
+                            </div>
+                            {/* A função dangerouslySetInnerHTML permite-nos usar a tag <b> da base de dados */}
+                            <pre 
+                                className="cifra-text text-slate-300 text-sm md:text-base leading-relaxed"
+                                dangerouslySetInnerHTML={{ __html: activeSong.cifra }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            );
+
+            // ==========================================
+            // ESTRUTURA GLOBAL DA PÁGINA
+            // ==========================================
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {/* Cabeçalho */}
+                    <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 print-hidden">
+                        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between">
+                            <div className="flex items-center gap-3 cursor-pointer group" onClick={goHome}>
+                                <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center text-slate-950 group-hover:rotate-12 transition-transform">
+                                    <i className="ph-fill ph-microphone-stage text-2xl"></i>
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-black text-slate-100 leading-none">Karaoke<span className="text-emerald-500">Cifra</span></h1>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-4">
+                                <div className="hidden md:flex relative">
+                                    <i className="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Procurar artista..." 
+                                        value={search}
+                                        onChange={(e) => { setSearch(e.target.value); if(view !== 'home') goHome(); }}
+                                        className="bg-slate-900 border border-slate-700 rounded-full py-2 pl-10 pr-4 text-sm text-slate-200 focus:outline-none focus:border-emerald-500 w-64 placeholder:text-slate-600"
+                                    />
+                                </div>
+                                
+                                {/* Botão PIX Global */}
+                                <button 
+                                    onClick={() => setShowPix(true)}
+                                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-full font-bold text-sm transition-colors"
+                                >
+                                    <i className="ph-fill ph-hands-clapping"></i>
+                                    Ajudar Canal
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Conteúdo Principal */}
+                    <main className="max-w-6xl mx-auto w-full px-4 py-8 flex-grow">
+                        {view === 'home' && renderHome()}
+                        {view === 'artist' && renderArtist()}
+                        {view === 'song' && renderSong()}
+                    </main>
+
+                    {/* Rodapé */}
+                    <footer className="border-t border-slate-800 bg-slate-900 mt-auto py-8 print-hidden">
+                        <div className="max-w-6xl mx-auto px-4 text-center text-slate-500 text-sm">
+                            <p className="flex items-center justify-center gap-2">
+                                Criado com <i className="ph-fill ph-heart text-red-500"></i> para músicos.
+                            </p>
+                        </div>
+                    </footer>
+
+                    {/* Modal PIX */}
+                    {showPix && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out]">
+                            <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-md w-full relative">
+                                <button 
+                                    onClick={() => setShowPix(false)}
+                                    className="absolute top-4 right-4 text-slate-500 hover:text-slate-300"
+                                >
+                                    <i className="ph ph-x text-2xl"></i>
+                                </button>
+                                
+                                <div className="text-center">
+                                    <div className="w-16 h-16 bg-purple-600/20 text-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <i className="ph-fill ph-currency-circle-dollar text-3xl"></i>
+                                    </div>
+                                    <h3 className="text-2xl font-black text-slate-100 mb-2">Apoie o Canal!</h3>
+                                    <p className="text-slate-400 mb-6">
+                                        O seu apoio ajuda a manter os ficheiros FLAC e Backing Tracks sempre online.
+                                    </p>
+                                    
+                                    <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl mb-6">
+                                        <p className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-1">Chave PIX (E-mail ou Telemóvel)</p>
+                                        <p className="text-emerald-400 font-mono text-lg font-bold select-all">seu-email@gmail.com</p>
+                                    </div>
+                                    
+                                    <button 
+                                        onClick={() => {
+                                            navigator.clipboard.writeText("seu-email@gmail.com");
+                                            alert("Chave PIX copiada para a área de transferência!");
+                                        }}
+                                        className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <i className="ph ph-copy"></i> Copiar Chave PIX
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Renderizar a App no DOM
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
