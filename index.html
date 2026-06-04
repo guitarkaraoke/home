@@ -47,13 +47,13 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState } = React;
+        const { useState, useEffect } = React;
 
         // ==========================================
-        // BASE DE DADOS SIMULADA (MOCK DATA)
-        // Adicione aqui os seus artistas e músicas
+        // BASE DE DADOS INICIAL
+        // Cole o código exportado do Painel Admin por cima deste bloco para atualizar no GitHub
         // ==========================================
-        const db = {
+        const initialDB = {
             artists: [
                 { id: 'titas', name: 'Titãs', cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=500&q=80', genre: 'Rock' },
                 { id: 'legiao', name: 'Legião Urbana', cover: 'https://images.unsplash.com/photo-1526478806334-5fd488fcaabc?auto=format&fit=crop&w=500&q=80', genre: 'Rock Nacional' },
@@ -68,22 +68,7 @@
                     bpm: '82',
                     flacLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
                     backingTrackLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
-                    cifra: `Tom: <b>G</b>
-
-Intro: <b>G</b>  <b>D/F#</b>  <b>Em</b>  <b>C</b> (2x)
-
-<b>G</b>             <b>D/F#</b>
-Devia ter amado mais
-          <b>Em</b>
-Ter chorado mais
-          <b>C</b>                 <b>G</b>
-Ter visto o sol nascer
-<b>G</b>             <b>D/F#</b>
-Devia ter arriscado mais
-        <b>Em</b>
-E até errado mais
-         <b>C</b>                 <b>G</b>
-Ter feito o que eu queria fazer`
+                    cifra: `Tom: <b>G</b>\n\nIntro: <b>G</b>  <b>D/F#</b>  <b>Em</b>  <b>C</b> (2x)\n\n<b>G</b>             <b>D/F#</b>\nDevia ter amado mais\n          <b>Em</b>\nTer chorado mais\n          <b>C</b>                 <b>G</b>\nTer visto o sol nascer\n<b>G</b>             <b>D/F#</b>\nDevia ter arriscado mais\n        <b>Em</b>\nE até errado mais\n         <b>C</b>                 <b>G</b>\nTer feito o que eu queria fazer`
                 },
                 {
                     id: 'tempo-perdido',
@@ -93,18 +78,7 @@ Ter feito o que eu queria fazer`
                     bpm: '115',
                     flacLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
                     backingTrackLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
-                    cifra: `Tom: <b>C</b>
-
-Intro: <b>C</b>  <b>Am7</b>  <b>Bm</b>  <b>Em</b> (2x)
-
-<b>C</b>             <b>Am7</b>
-Todos os dias quando acordo
-<b>Bm</b>              <b>Em</b>
-Não tenho mais o tempo que passou
-<b>C</b>             <b>Am7</b>
-Mas tenho muito tempo
-<b>Bm</b>              <b>Em</b>
-Temos todo o tempo do mundo`
+                    cifra: `Tom: <b>C</b>\n\nIntro: <b>C</b>  <b>Am7</b>  <b>Bm</b>  <b>Em</b> (2x)\n\n<b>C</b>             <b>Am7</b>\nTodos os dias quando acordo\n<b>Bm</b>              <b>Em</b>\nNão tenho mais o tempo que passou\n<b>C</b>             <b>Am7</b>\nMas tenho muito tempo\n<b>Bm</b>              <b>Em</b>\nTemos todo o tempo do mundo`
                 },
                 {
                     id: 'whisky-a-go-go',
@@ -114,16 +88,7 @@ Temos todo o tempo do mundo`
                     bpm: '130',
                     flacLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
                     backingTrackLink: 'COLOQUE_SEU_LINK_DO_DRIVE_AQUI',
-                    cifra: `Tom: <b>A</b>
-
-Intro: <b>A</b>  <b>D</b>  <b>E</b> (4x)
-
-<b>A</b>              <b>D</b>           <b>E</b>
-Foi numa festa, gelo e cuba-libre
-<b>A</b>             <b>D</b>            <b>E</b>
-E na vitrola rolando um som
-<b>A</b>              <b>D</b>         <b>E</b>
-Que eu te vi dançar, linda`
+                    cifra: `Tom: <b>A</b>\n\nIntro: <b>A</b>  <b>D</b>  <b>E</b> (4x)\n\n<b>A</b>              <b>D</b>           <b>E</b>\nFoi numa festa, gelo e cuba-libre\n<b>A</b>             <b>D</b>            <b>E</b>\nE na vitrola rolando um som\n<b>A</b>              <b>D</b>         <b>E</b>\nQue eu te vi dançar, linda`
                 }
             ]
         };
@@ -132,12 +97,28 @@ Que eu te vi dançar, linda`
         // COMPONENTE PRINCIPAL (APLICAÇÃO)
         // ==========================================
         function App() {
+            // Inicializar a BD (Recupera do LocalStorage se existir, senão usa a initialDB)
+            const [db, setDb] = useState(() => {
+                const saved = localStorage.getItem('karaoke_db');
+                return saved ? JSON.parse(saved) : initialDB;
+            });
+
+            // Guardar no LocalStorage sempre que a BD muda
+            useEffect(() => {
+                localStorage.setItem('karaoke_db', JSON.stringify(db));
+            }, [db]);
+
             // Gestão de estado para a navegação
-            const [view, setView] = useState('home'); // 'home', 'artist', 'song'
+            const [view, setView] = useState('home'); // 'home', 'artist', 'song', 'admin'
             const [activeArtist, setActiveArtist] = useState(null);
             const [activeSong, setActiveSong] = useState(null);
             const [search, setSearch] = useState('');
             const [showPix, setShowPix] = useState(false);
+
+            // Estados do Admin
+            const [adminTab, setAdminTab] = useState('artists');
+            const [newArtist, setNewArtist] = useState({ name: '', cover: '', genre: '' });
+            const [newSong, setNewSong] = useState({ artistId: '', title: '', key: '', bpm: '', flacLink: '', backingTrackLink: '', cifra: '' });
 
             // Funções de navegação
             const goHome = () => {
@@ -159,13 +140,18 @@ Que eu te vi dançar, linda`
                 window.scrollTo(0, 0);
             };
 
+            const goAdmin = () => {
+                setView('admin');
+                window.scrollTo(0, 0);
+            }
+
             // Filtrar artistas na página inicial
             const filteredArtists = db.artists.filter(a => 
                 a.name.toLowerCase().includes(search.toLowerCase())
             );
 
             // ==========================================
-            // VISTAS (VIEWS)
+            // VISTAS (VIEWS) DO SITE PÚBLICO
             // ==========================================
             
             // 1. Vista Inicial (Lista de Artistas)
@@ -192,12 +178,12 @@ Que eu te vi dançar, linda`
                                 onClick={() => goArtist(artist)}
                                 className="group cursor-pointer bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 hover:border-emerald-500/50 transition-all duration-300 hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.3)]"
                             >
-                                <div className="aspect-square relative overflow-hidden">
-                                    <img 
-                                        src={artist.cover} 
-                                        alt={artist.name} 
-                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                    />
+                                <div className="aspect-square relative overflow-hidden bg-slate-800 flex items-center justify-center">
+                                    {artist.cover ? (
+                                        <img src={artist.cover} alt={artist.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                    ) : (
+                                        <i className="ph ph-microphone-stage text-4xl text-slate-600"></i>
+                                    )}
                                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/20 to-transparent"></div>
                                 </div>
                                 <div className="p-4">
@@ -212,7 +198,7 @@ Que eu te vi dançar, linda`
                     </div>
                     {filteredArtists.length === 0 && (
                         <div className="text-center py-12 text-slate-500">
-                            Nenhum artista encontrado.
+                            Nenhum artista encontrado. Adicione um na Área Administrativa.
                         </div>
                     )}
                 </div>
@@ -229,7 +215,13 @@ Que eu te vi dançar, linda`
                         </button>
 
                         <div className="flex flex-col md:flex-row gap-6 mb-10 items-center md:items-start">
-                            <img src={activeArtist.cover} alt={activeArtist.name} className="w-40 h-40 rounded-full object-cover border-4 border-slate-800 shadow-2xl" />
+                            {activeArtist.cover ? (
+                                <img src={activeArtist.cover} alt={activeArtist.name} className="w-40 h-40 rounded-full object-cover border-4 border-slate-800 shadow-2xl" />
+                            ) : (
+                                <div className="w-40 h-40 rounded-full bg-slate-800 border-4 border-slate-700 flex items-center justify-center text-5xl text-slate-600">
+                                    <i className="ph ph-user"></i>
+                                </div>
+                            )}
                             <div className="text-center md:text-left pt-4">
                                 <h2 className="text-5xl font-black text-slate-100">{activeArtist.name}</h2>
                                 <p className="text-emerald-500 font-medium mt-2 text-lg">{activeArtist.genre}</p>
@@ -260,7 +252,7 @@ Que eu te vi dançar, linda`
                                     </div>
                                 ))}
                                 {songs.length === 0 && (
-                                    <div className="p-8 text-center text-slate-500">Sem músicas registadas.</div>
+                                    <div className="p-8 text-center text-slate-500">Sem músicas registadas neste artista.</div>
                                 )}
                             </div>
                         </div>
@@ -286,18 +278,22 @@ Que eu te vi dançar, linda`
                             
                             <div className="flex flex-col md:flex-row gap-4">
                                 {/* Botão FLAC */}
-                                <a href={activeSong.flacLink} target="_blank" rel="noreferrer" 
-                                   className="flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-4 rounded-xl font-bold transition-all transform hover:scale-[1.02] shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)]">
-                                    <i className="ph-fill ph-file-audio text-2xl"></i>
-                                    Baixar Áudio FLAC
-                                </a>
+                                {activeSong.flacLink && (
+                                    <a href={activeSong.flacLink} target="_blank" rel="noreferrer" 
+                                    className="flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-4 rounded-xl font-bold transition-all transform hover:scale-[1.02] shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)]">
+                                        <i className="ph-fill ph-file-audio text-2xl"></i>
+                                        Baixar Áudio FLAC
+                                    </a>
+                                )}
                                 
                                 {/* Botão Backing Track */}
-                                <a href={activeSong.backingTrackLink} target="_blank" rel="noreferrer" 
-                                   className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-bold transition-all transform hover:scale-[1.02] shadow-[0_0_20px_-5px_rgba(37,99,235,0.4)]">
-                                    <i className="ph-fill ph-waveform text-2xl"></i>
-                                    Baixar Backing Tracks
-                                </a>
+                                {activeSong.backingTrackLink && (
+                                    <a href={activeSong.backingTrackLink} target="_blank" rel="noreferrer" 
+                                    className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-bold transition-all transform hover:scale-[1.02] shadow-[0_0_20px_-5px_rgba(37,99,235,0.4)]">
+                                        <i className="ph-fill ph-waveform text-2xl"></i>
+                                        Baixar Backing Tracks / Stems
+                                    </a>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -324,7 +320,6 @@ Que eu te vi dançar, linda`
                                 <h2 className="text-xl text-gray-700 mb-3">{activeArtist.name}</h2>
                                 <p className="text-sm">Tom: <b>{activeSong.key}</b> • BPM: <b>{activeSong.bpm}</b></p>
                             </div>
-                            {/* A função dangerouslySetInnerHTML permite-nos usar a tag <b> da base de dados */}
                             <pre 
                                 className="cifra-text text-slate-300 text-sm md:text-base leading-relaxed"
                                 dangerouslySetInnerHTML={{ __html: activeSong.cifra }}
@@ -333,6 +328,198 @@ Que eu te vi dançar, linda`
                     </div>
                 </div>
             );
+
+            // ==========================================
+            // VISTA DE ADMINISTRAÇÃO (ÁREA CMS)
+            // ==========================================
+            const renderAdmin = () => {
+                const handleAddArtist = (e) => {
+                    e.preventDefault();
+                    const id = newArtist.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                    if (db.artists.find(a => a.id === id)) return alert('Artista já existe!');
+                    setDb({ ...db, artists: [...db.artists, { ...newArtist, id }] });
+                    setNewArtist({ name: '', cover: '', genre: '' });
+                    alert('Artista adicionado com sucesso!');
+                };
+
+                const handleAddSong = (e) => {
+                    e.preventDefault();
+                    if (!newSong.artistId) return alert('Selecione um Artista!');
+                    const id = newSong.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                    setDb({ ...db, songs: [...db.songs, { ...newSong, id }] });
+                    setNewSong({ artistId: '', title: '', key: '', bpm: '', flacLink: '', backingTrackLink: '', cifra: '' });
+                    alert('Música adicionada com sucesso!');
+                };
+
+                const deleteArtist = (id) => {
+                    if(!confirm('Apagar artista e todas as suas músicas?')) return;
+                    setDb({
+                        ...db,
+                        artists: db.artists.filter(a => a.id !== id),
+                        songs: db.songs.filter(s => s.artistId !== id)
+                    });
+                };
+
+                const deleteSong = (id) => {
+                    if(!confirm('Apagar esta música?')) return;
+                    setDb({ ...db, songs: db.songs.filter(s => s.id !== id) });
+                };
+
+                return (
+                    <div className="animate-[fadeIn_0.3s_ease-out]">
+                        <div className="flex items-center justify-between mb-8 border-b border-slate-800 pb-4">
+                            <div>
+                                <h2 className="text-3xl font-black text-slate-100 flex items-center gap-3">
+                                    <i className="ph-fill ph-gear text-emerald-500"></i> Área Administrativa
+                                </h2>
+                                <p className="text-slate-400 mt-1">Gira os seus artistas, músicas e exporte o código para o GitHub.</p>
+                            </div>
+                            <button onClick={goHome} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-bold">
+                                Sair do Admin
+                            </button>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="flex gap-2 mb-6 overflow-x-auto">
+                            <button onClick={() => setAdminTab('artists')} className={`px-4 py-2 rounded-lg font-bold whitespace-nowrap ${adminTab === 'artists' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Gerir Artistas (Pastas)</button>
+                            <button onClick={() => setAdminTab('songs')} className={`px-4 py-2 rounded-lg font-bold whitespace-nowrap ${adminTab === 'songs' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Gerir Músicas (Ficheiros)</button>
+                            <button onClick={() => setAdminTab('export')} className={`px-4 py-2 rounded-lg font-bold whitespace-nowrap ${adminTab === 'export' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Exportar para GitHub</button>
+                        </div>
+
+                        {/* Tab: Artistas */}
+                        {adminTab === 'artists' && (
+                            <div className="grid md:grid-cols-2 gap-8">
+                                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                                    <h3 className="text-xl font-bold mb-4">Adicionar Novo Artista</h3>
+                                    <form onSubmit={handleAddArtist} className="flex flex-col gap-4">
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-1">Nome do Artista/Banda</label>
+                                            <input required type="text" value={newArtist.name} onChange={e => setNewArtist({...newArtist, name: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" placeholder="Ex: Coldplay" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-1">Género Musical</label>
+                                            <input type="text" value={newArtist.genre} onChange={e => setNewArtist({...newArtist, genre: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" placeholder="Ex: Pop Rock" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-1">Link da Imagem (Capa)</label>
+                                            <input type="url" value={newArtist.cover} onChange={e => setNewArtist({...newArtist, cover: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" placeholder="https://..." />
+                                        </div>
+                                        <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-3 rounded-lg mt-2">Criar Artista</button>
+                                    </form>
+                                </div>
+                                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                                    <h3 className="text-xl font-bold mb-4">Artistas Existentes ({db.artists.length})</h3>
+                                    <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto pr-2">
+                                        {db.artists.map(a => (
+                                            <div key={a.id} className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
+                                                <div>
+                                                    <p className="font-bold text-slate-200">{a.name}</p>
+                                                    <p className="text-xs text-slate-500">{a.genre}</p>
+                                                </div>
+                                                <button onClick={() => deleteArtist(a.id)} className="text-red-500 hover:text-red-400 p-2 bg-slate-900 rounded-md">
+                                                    <i className="ph ph-trash"></i>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Tab: Músicas */}
+                        {adminTab === 'songs' && (
+                            <div className="grid md:grid-cols-2 gap-8">
+                                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                                    <h3 className="text-xl font-bold mb-4">Adicionar Nova Música</h3>
+                                    <form onSubmit={handleAddSong} className="flex flex-col gap-4">
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-1">Artista</label>
+                                            <select required value={newSong.artistId} onChange={e => setNewSong({...newSong, artistId: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none">
+                                                <option value="">Selecione um Artista...</option>
+                                                {db.artists.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm text-slate-400 mb-1">Título da Música</label>
+                                                <input required type="text" value={newSong.title} onChange={e => setNewSong({...newSong, title: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="block text-sm text-slate-400 mb-1">Tom</label>
+                                                    <input type="text" value={newSong.key} onChange={e => setNewSong({...newSong, key: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" placeholder="Ex: G" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm text-slate-400 mb-1">BPM</label>
+                                                    <input type="text" value={newSong.bpm} onChange={e => setNewSong({...newSong, bpm: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" placeholder="120" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-1">Link Áudio FLAC (Google Drive/etc)</label>
+                                            <input type="url" value={newSong.flacLink} onChange={e => setNewSong({...newSong, flacLink: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" placeholder="https://" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-1">Link Backing Tracks / Stems (Multi-pistas)</label>
+                                            <input type="url" value={newSong.backingTrackLink} onChange={e => setNewSong({...newSong, backingTrackLink: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" placeholder="https://" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-slate-400 mb-1">Letra com Cifra HTML (use &lt;b&gt;Acorde&lt;/b&gt; para destacar)</label>
+                                            <textarea required rows="8" value={newSong.cifra} onChange={e => setNewSong({...newSong, cifra: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none font-mono text-sm" placeholder="Tom: <b>G</b>\n\n<b>G</b>                <b>D</b>\nLetra da música aqui"></textarea>
+                                        </div>
+                                        <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-3 rounded-lg mt-2">Gravar Música</button>
+                                    </form>
+                                </div>
+                                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                                    <h3 className="text-xl font-bold mb-4">Músicas Existentes ({db.songs.length})</h3>
+                                    <div className="flex flex-col gap-2 max-h-[600px] overflow-y-auto pr-2">
+                                        {db.songs.map(s => {
+                                            const artist = db.artists.find(a => a.id === s.artistId);
+                                            return (
+                                                <div key={s.id} className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
+                                                    <div>
+                                                        <p className="font-bold text-slate-200">{s.title}</p>
+                                                        <p className="text-xs text-slate-500">{artist ? artist.name : 'Desconhecido'}</p>
+                                                    </div>
+                                                    <button onClick={() => deleteSong(s.id)} className="text-red-500 hover:text-red-400 p-2 bg-slate-900 rounded-md">
+                                                        <i className="ph ph-trash"></i>
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Tab: Exportar */}
+                        {adminTab === 'export' && (
+                            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-10 max-w-3xl mx-auto text-center">
+                                <i className="ph-fill ph-github-logo text-6xl text-slate-400 mb-4"></i>
+                                <h3 className="text-2xl font-black mb-2">Salve o seu trabalho!</h3>
+                                <p className="text-slate-400 mb-6">Como o GitHub Pages é gratuito e estático, precisa de atualizar o ficheiro <code className="bg-slate-800 px-1 rounded text-emerald-400">index.html</code> no seu repositório para as alterações ficarem online para os outros utilizadores.</p>
+                                
+                                <div className="bg-slate-950 p-4 rounded-xl text-left border border-slate-800 relative">
+                                    <button 
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(`const initialDB = ${JSON.stringify(db, null, 4)};`);
+                                            alert("Código copiado! Cole-o por cima da secção initialDB no seu ficheiro index.html");
+                                        }}
+                                        className="absolute top-4 right-4 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1 rounded-md text-sm font-bold border border-slate-600 flex items-center gap-2"
+                                    >
+                                        <i className="ph ph-copy"></i> Copiar Código
+                                    </button>
+                                    <p className="text-slate-500 text-sm mb-3">1. Copie o bloco abaixo.</p>
+                                    <p className="text-slate-500 text-sm mb-4">2. Substitua o bloco <code className="text-emerald-400">const initialDB = ...</code> no seu código-fonte.</p>
+                                    <pre className="text-xs text-emerald-400 font-mono overflow-x-auto max-h-[300px]">
+                                        const initialDB = {JSON.stringify(db, null, 4)};
+                                    </pre>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
 
             // ==========================================
             // ESTRUTURA GLOBAL DA PÁGINA
@@ -358,7 +545,7 @@ Que eu te vi dançar, linda`
                                         type="text" 
                                         placeholder="Procurar artista..." 
                                         value={search}
-                                        onChange={(e) => { setSearch(e.target.value); if(view !== 'home') goHome(); }}
+                                        onChange={(e) => { setSearch(e.target.value); if(view !== 'home' && view !== 'admin') goHome(); }}
                                         className="bg-slate-900 border border-slate-700 rounded-full py-2 pl-10 pr-4 text-sm text-slate-200 focus:outline-none focus:border-emerald-500 w-64 placeholder:text-slate-600"
                                     />
                                 </div>
@@ -371,6 +558,15 @@ Que eu te vi dançar, linda`
                                     <i className="ph-fill ph-hands-clapping"></i>
                                     Ajudar Canal
                                 </button>
+
+                                {/* Botão de Administração */}
+                                <button 
+                                    onClick={goAdmin}
+                                    className="flex items-center justify-center w-10 h-10 bg-slate-900 border border-slate-700 hover:bg-slate-800 rounded-full text-slate-400 hover:text-emerald-400 transition-colors"
+                                    title="Área Administrativa"
+                                >
+                                    <i className="ph-fill ph-gear text-xl"></i>
+                                </button>
                             </div>
                         </div>
                     </header>
@@ -380,6 +576,7 @@ Que eu te vi dançar, linda`
                         {view === 'home' && renderHome()}
                         {view === 'artist' && renderArtist()}
                         {view === 'song' && renderSong()}
+                        {view === 'admin' && renderAdmin()}
                     </main>
 
                     {/* Rodapé */}
@@ -393,7 +590,7 @@ Que eu te vi dançar, linda`
 
                     {/* Modal PIX */}
                     {showPix && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out]">
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out] print-hidden">
                             <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-md w-full relative">
                                 <button 
                                     onClick={() => setShowPix(false)}
