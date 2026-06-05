@@ -39,6 +39,12 @@
             font-weight: 900; 
             cursor: pointer; 
         }
+        
+        /* Força a remoção de espaços ou margens invisíveis importadas de outros sites */
+        .cifra-container pre, .cifra-container pre > :first-child {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
 
         @media print {
             body { background-color: #fff !important; color: #000 !important; }
@@ -392,10 +398,14 @@
 
                 // Transpose Engine
                 const processedCifra = useMemo(() => {
-                    const netShift = toneShift - capo;
-                    if (netShift === 0) return song.cifra;
+                    let text = song.cifra || '';
+                    // Corta automaticamente linhas em branco, espaços gigantes ou <br> gerados pela outra IA no topo do texto
+                    text = text.replace(/^([\s\r\n]|<br\s*\/?>|&nbsp;)+/gi, '');
                     
-                    return song.cifra.replace(/<b>(.*?)<\/b>/g, (match, chordGroup) => {
+                    const netShift = toneShift - capo;
+                    if (netShift === 0) return text;
+                    
+                    return text.replace(/<b>(.*?)<\/b>/g, (match, chordGroup) => {
                         const newChord = transposeChordStr(chordGroup, netShift);
                         return `<b>${newChord}</b>`;
                     });
@@ -718,7 +728,20 @@
                                             <option value="">Selecione o Género...</option>
                                             {categories.map(c => <option key={c} value={c}>{c}</option>)}
                                         </select>
-                                        <input type="url" value={newArtist.cover} onChange={e => setNewArtist({...newArtist, cover: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="URL da Imagem da Capa" />
+                                        <div className="flex gap-2">
+                                            <input type="url" value={newArtist.cover} onChange={e => setNewArtist({...newArtist, cover: e.target.value})} className="flex-1 w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="URL da Imagem da Capa" />
+                                            <label className="flex items-center justify-center bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 px-4 rounded-lg cursor-pointer transition-colors" title="Fazer Upload de Imagem do Computador">
+                                                <i className="ph ph-upload-simple text-xl"></i>
+                                                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if(file) {
+                                                        const reader = new FileReader();
+                                                        reader.onloadend = () => setNewArtist({...newArtist, cover: reader.result});
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }} />
+                                            </label>
+                                        </div>
                                         <div className="flex gap-2">
                                             <button type="submit" className="flex-1 bg-emerald-500 text-slate-950 font-bold p-3 rounded-lg">{editingArtistId ? 'Atualizar' : 'Gravar'}</button>
                                             {editingArtistId && <button type="button" onClick={() => {setEditingArtistId(null); setNewArtist({name:'',cover:'',genre:''})}} className="bg-slate-700 text-white font-bold p-3 rounded-lg">Cancelar</button>}
