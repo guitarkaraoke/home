@@ -26,6 +26,7 @@
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
+        /* Estilo Cifra Club - Fundo Branco e Texto Cinza/Azul */
         .cifra-container { 
             background-color: #ffffff; 
             color: #374151; /* Cinza escuro para a letra */
@@ -40,12 +41,13 @@
             cursor: pointer; 
         }
         
-        /* Força a remoção de espaços ou margens invisíveis importadas de outros sites */
+        /* Força a remoção de espaços ou margens invisíveis importadas de outros sites/IAs */
         .cifra-container pre, .cifra-container pre > :first-child {
             margin-top: 0 !important;
             padding-top: 0 !important;
         }
 
+        /* Estilos para Impressão e PDF */
         @media print {
             body { background-color: #fff !important; color: #000 !important; }
             .print-hidden { display: none !important; }
@@ -61,8 +63,8 @@
 
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, setDoc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const { useState, useEffect, useMemo } = React;
 
@@ -78,6 +80,7 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const dbFirestore = getFirestore(app);
+        const appId = "karaoke-site-master"; // ID do projeto na nuvem
 
         const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
         const flats = { 'Db': 'C#', 'Eb': 'D#', 'Gb': 'F#', 'Ab': 'G#', 'Bb': 'A#' };
@@ -145,7 +148,7 @@
         const ChordDiagram = ({ chordName }) => {
             const chord = chordDict[chordName];
             if (!chord) {
-                // Fallback for missing chords in the dictionary
+                // Se o acorde não existir no dicionário, mostra apenas uma caixa bonita com o nome
                 return (
                     <div className="w-24 h-32 border border-slate-700 bg-slate-800 rounded-lg flex items-center justify-center text-slate-200 font-bold shadow-sm">
                         {chordName}
@@ -157,26 +160,26 @@
                 <div className="flex flex-col items-center bg-slate-800 p-2 rounded-lg border border-slate-700 shadow-sm w-24">
                     <span className="font-bold text-slate-200 mb-1">{chordName}</span>
                     <svg width="60" height="70" viewBox="0 0 60 70">
-                        {/* Guitar Strings */}
+                        {/* Cordas da Guitarra */}
                         {[0, 10, 20, 30, 40, 50].map((x, i) => (
                             <line key={`s${i}`} x1={x + 5} y1="10" x2={x + 5} y2="60" stroke="#cbd5e1" strokeWidth="1" />
                         ))}
-                        {/* Frets */}
+                        {/* Trastes (Frets) */}
                         {[10, 22.5, 35, 47.5, 60].map((y, i) => (
                             <line key={`f${i}`} x1="5" y1={y} x2="55" y2={y} stroke="#cbd5e1" strokeWidth={i === 0 ? "3" : "1"} />
                         ))}
                         
-                        {/* Base Fret Text */}
+                        {/* Texto indicativo da casa inicial (Base Fret) */}
                         {chord.baseFret > 1 && (
                             <text x="-5" y="20" fontSize="10" fill="#94a3b8">{chord.baseFret}ª</text>
                         )}
 
-                        {/* Barre */}
+                        {/* Pestana (Barre) */}
                         {chord.barre && (
                             <rect x="5" y={(chord.barre * 12.5) - 2.5 + 5} width="50" height="6" rx="3" fill="#10b981" />
                         )}
 
-                        {/* Fingers / Dots */}
+                        {/* Dedos / Bolinhas */}
                         {chord.frets.map((fret, i) => {
                             if (fret === -1) {
                                 return <text key={`x${i}`} x={i * 10 + 2} y="8" fontSize="10" fill="#ef4444">x</text>;
@@ -199,27 +202,27 @@
             const [db, setDb] = useState({ artists: [], songs: [] });
             const [loading, setLoading] = useState(true);
 
-            // View State
+            // Controle de Vista Principal
             const [view, setView] = useState('home'); 
             const [activeArtist, setActiveArtist] = useState(null);
             const [activeSong, setActiveSong] = useState(null);
             const [search, setSearch] = useState('');
             const [showPix, setShowPix] = useState(false);
 
-            // Admin State
+            // Controle de Admin (Variáveis de Estado no topo!)
             const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
             const [adminTab, setAdminTab] = useState('artists');
             const [pin, setPin] = useState('');
             const [pinError, setPinError] = useState(false);
-            const adminPassword = "1511Kcc"; // A SENHA DO ADMINISTRADOR
+            const adminPassword = "1511Kcc"; // A SUA SENHA DE ADMIN
 
-            // Form State
+            // Formulários de Edição / Adição
             const [newArtist, setNewArtist] = useState({ name: '', cover: '', genre: '' });
             const [newSong, setNewSong] = useState({ artistId: '', title: '', album: '', key: '', bpm: '', flacLink: '', backingTrackLink: '', youtubeLink: '', cifra: '' });
             const [editingArtistId, setEditingArtistId] = useState(null);
             const [editingSongId, setEditingSongId] = useState(null);
 
-            // Categories
+            // Categorias Musicais Disponíveis
             const categories = ["Sertanejo", "MPB", "Flashbacks", "Internacionais", "Pop Rock Nacional", "Gospel/Religioso", "Rock Internacional", "Samba", "Pagode", "Bregas", "Alternativo", "Hip Hop/Rap", "Axé", "Arrocha/Forró", "Blues", "Infantil", "Outros"];
 
             useEffect(() => {
@@ -230,8 +233,8 @@
 
             useEffect(() => {
                 if (!user) return;
-                const artistsRef = collection(dbFirestore, 'artists');
-                const songsRef = collection(dbFirestore, 'songs');
+                const artistsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists');
+                const songsRef = collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs');
 
                 const unsubA = onSnapshot(artistsRef, snap => {
                     setDb(prev => ({ ...prev, artists: snap.docs.map(d => ({ id: d.id, ...d.data() })) }));
@@ -244,7 +247,7 @@
                 return () => { unsubA(); unsubS(); };
             }, [user]);
 
-            // Navigation Helpers
+            // Navegação e Filtros
             const goHome = () => { setView('home'); setActiveArtist(null); setActiveSong(null); window.scrollTo(0, 0); };
             const goArtist = (artist) => { setActiveArtist(artist); setView('artist'); window.scrollTo(0, 0); };
             const goSong = (song) => { setActiveSong(song); setView('song'); window.scrollTo(0, 0); };
@@ -375,9 +378,9 @@
                 const [newCommName, setNewCommName] = useState('');
                 const [newCommText, setNewCommText] = useState('');
 
-                // Fetch comments
+                // Buscar comentários
                 useEffect(() => {
-                    const q = query(collection(dbFirestore, 'comments'), where('songId', '==', song.id), orderBy('createdAt', 'desc'));
+                    const q = query(collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'comments'), where('songId', '==', song.id), orderBy('createdAt', 'desc'));
                     const unsub = onSnapshot(q, snap => {
                         setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                     });
@@ -387,7 +390,7 @@
                 const postComment = async (e) => {
                     e.preventDefault();
                     if(!newCommName || !newCommText) return;
-                    await addDoc(collection(dbFirestore, 'comments'), {
+                    await addDoc(collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'comments'), {
                         songId: song.id,
                         author: newCommName,
                         text: newCommText,
@@ -396,7 +399,7 @@
                     setNewCommText('');
                 };
 
-                // Transpose Engine
+                // Motor de Transposição (Capo e Tom) e Limpeza de Lixo HTML
                 const processedCifra = useMemo(() => {
                     let text = song.cifra || '';
                     // Corta automaticamente linhas em branco, espaços gigantes ou <br> gerados pela outra IA no topo do texto
@@ -411,18 +414,18 @@
                     });
                 }, [song.cifra, toneShift, capo]);
 
-                // Extract unique chords for Diagrams
+                // Extrair acordes para desenhar na tela
                 const uniqueChords = useMemo(() => {
                     const matches = [...processedCifra.matchAll(/<b>(.*?)<\/b>/g)];
                     return Array.from(new Set(matches.map(m => m[1])));
                 }, [processedCifra]);
 
-                // Handle YouTube Embed safely
+                // Ajustar Link do YouTube para Embed seguro
                 const getEmbedUrl = (url) => {
                     if (!url) return null;
                     if (url.includes('youtube.com/watch?v=')) return url.replace("watch?v=", "embed/");
                     if (url.includes('youtu.be/')) return url.replace("youtu.be/", "youtube.com/embed/");
-                    return null; // Not a valid YT link or format we can easily embed
+                    return null;
                 }
                 const embedUrl = getEmbedUrl(song.youtubeLink);
 
@@ -433,7 +436,7 @@
                         </button>
 
                         <div className="grid md:grid-cols-3 gap-6 mb-8 print-hidden">
-                            {/* Left Side: Header & Downloads */}
+                            {/* Lado Esquerdo: Header e Downloads */}
                             <div className="md:col-span-2 bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
                                 <div className="absolute top-[-20%] right-[-10%] text-slate-800/30 pointer-events-none">
                                     <i className="ph-fill ph-speaker-hifi text-[250px]"></i>
@@ -465,20 +468,15 @@
                                 </div>
                             </div>
 
-                            {/* Right Side: YouTube Player */}
-                            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl flex flex-col h-full">
+                            {/* Lado Direito: Vídeo YouTube */}
+                            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl flex flex-col h-full print-hidden">
                                 <div className="flex items-center gap-2 mb-3 px-2">
                                     <i className="ph-fill ph-youtube-logo text-red-500 text-xl"></i>
                                     <h3 className="font-bold text-slate-200">Cover de Referência</h3>
                                 </div>
                                 <div className="w-full aspect-video rounded-xl overflow-hidden bg-black flex-grow flex items-center justify-center border border-slate-800">
                                     {embedUrl ? (
-                                        <iframe 
-                                            width="100%" height="100%" 
-                                            src={embedUrl} 
-                                            title="YouTube video player" frameBorder="0" 
-                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen>
-                                        </iframe>
+                                        <iframe width="100%" height="100%" src={embedUrl} title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
                                     ) : (
                                         <div className="text-slate-600 flex flex-col items-center gap-2">
                                             <i className="ph ph-video-camera-slash text-4xl"></i>
@@ -489,10 +487,10 @@
                             </div>
                         </div>
 
-                        {/* Cifra Club - Area */}
+                        {/* Área do Cifra Club (Fundo Branco, Toolbar Escura) */}
                         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8">
                             
-                            {/* Barra de Ferramentas / Formatação (Com texto branco para contraste) */}
+                            {/* Toolbar de Formatação */}
                             <div className="flex flex-wrap items-center justify-between gap-4 mb-6 border-b border-slate-800 pb-6 print-hidden">
                                 <div className="flex items-center gap-2">
                                     <i className="ph-fill ph-text-aa text-emerald-500 text-2xl"></i>
@@ -516,26 +514,26 @@
                                         </select>
                                     </div>
 
-                                    {/* Font Size */}
+                                    {/* Fonte */}
                                     <div className="flex items-center bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
                                         <button onClick={() => setFontSize(f => Math.max(10, f - 2))} className="px-3 py-2 hover:bg-slate-700 font-bold text-slate-200">-A</button>
                                         <span className="px-2 text-sm text-slate-400">{fontSize}px</span>
                                         <button onClick={() => setFontSize(f => Math.min(30, f + 2))} className="px-3 py-2 hover:bg-slate-700 font-bold text-slate-200">+A</button>
                                     </div>
 
-                                    {/* Columns */}
+                                    {/* Colunas */}
                                     <button onClick={() => setCols(c => c === 1 ? 2 : 1)} className={`px-4 py-2 rounded-lg border text-sm font-bold flex items-center gap-2 transition-colors ${cols === 2 ? 'bg-emerald-500 border-emerald-500 text-slate-900' : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'}`}>
                                         <i className="ph ph-columns"></i> 2 Colunas
                                     </button>
 
-                                    {/* Print */}
+                                    {/* PDF */}
                                     <button onClick={() => window.print()} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors border border-transparent">
                                         <i className="ph ph-printer text-lg"></i> Imprimir/PDF
                                     </button>
                                 </div>
                             </div>
                             
-                            {/* Caixa Branca da Cifra */}
+                            {/* Cifra (Caixa Branca com a letra) */}
                             <div className="cifra-container shadow-inner bg-white rounded-xl">
                                 <div className="print-only mb-8 border-b border-gray-300 pb-4">
                                     <div className="flex justify-between items-end">
@@ -560,7 +558,7 @@
                                 />
                             </div>
 
-                            {/* Diagramas de Acordes */}
+                            {/* Acordes em Diagrama */}
                             {uniqueChords.length > 0 && (
                                 <div className="mt-12 pt-8 border-t border-slate-800 print-hidden">
                                     <h3 className="text-xl font-bold text-slate-200 mb-6 flex items-center gap-2">
@@ -575,7 +573,7 @@
                             )}
                         </div>
 
-                        {/* Sistema de Comentários */}
+                        {/* Comentários na Nuvem */}
                         <div className="mt-12 bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 print-hidden">
                             <h3 className="text-2xl font-bold text-slate-200 mb-6 flex items-center gap-2">
                                 <i className="ph-fill ph-chats-circle text-emerald-500"></i> Comentários ({comments.length})
@@ -587,7 +585,7 @@
                                         <input required type="text" value={newCommName} onChange={e=>setNewCommName(e.target.value)} placeholder="O seu Nome" className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <input required type="text" value={newCommText} onChange={e=>setNewCommText(e.target.value)} placeholder="Deixe uma dica, agradecimento ou dúvida sobre a música..." className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" />
+                                        <input required type="text" value={newCommText} onChange={e=>setNewCommText(e.target.value)} placeholder="Deixe uma dica ou dúvida..." className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 outline-none" />
                                     </div>
                                 </div>
                                 <div className="flex justify-end">
@@ -634,23 +632,12 @@
                             
                             <form onSubmit={handleLogin} className="flex flex-col gap-4">
                                 <div>
-                                    <label className="block text-sm text-slate-400 mb-1">Palavra-passe de Gestor</label>
-                                    <input 
-                                        type="password" 
-                                        value={pin} 
-                                        onChange={e => {setPin(e.target.value); setPinError(false);}} 
-                                        className={`w-full bg-slate-950 border ${pinError ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-center tracking-widest text-lg text-slate-200 focus:border-emerald-500 outline-none transition-colors`} 
-                                        placeholder="••••"
-                                        autoFocus
-                                    />
-                                    {pinError && <p className="text-red-500 text-xs mt-2 text-center">Palavra-passe incorreta.</p>}
+                                    <label className="block text-sm text-slate-400 mb-1">Palavra-passe</label>
+                                    <input type="password" value={pin} onChange={e => {setPin(e.target.value); setPinError(false);}} className={`w-full bg-slate-950 border ${pinError ? 'border-red-500' : 'border-slate-700'} rounded-xl p-3 text-center tracking-widest text-lg text-slate-200 focus:border-emerald-500 outline-none`} placeholder="••••" autoFocus />
+                                    {pinError && <p className="text-red-500 text-xs mt-2 text-center">Incorreta.</p>}
                                 </div>
-                                <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-3 rounded-xl transition-transform hover:scale-[1.02]">
-                                    Entrar no Painel
-                                </button>
-                                <button type="button" onClick={goHome} className="text-slate-500 hover:text-slate-300 text-sm mt-2">
-                                    Cancelar e Voltar
-                                </button>
+                                <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-3 rounded-xl transition-transform hover:scale-[1.02]">Entrar no Painel</button>
+                                <button type="button" onClick={goHome} className="text-slate-500 hover:text-slate-300 text-sm mt-2">Cancelar</button>
                             </form>
                         </div>
                     </div>
@@ -662,10 +649,10 @@
                     e.preventDefault();
                     try {
                         if (editingArtistId) {
-                            await updateDoc(doc(dbFirestore, 'artists', editingArtistId), newArtist);
+                            await updateDoc(doc(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists', editingArtistId), newArtist);
                             alert('Artista atualizado!');
                         } else {
-                            await addDoc(collection(dbFirestore, 'artists'), newArtist);
+                            await addDoc(collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists'), newArtist);
                             alert('Artista criado!');
                         }
                         setNewArtist({ name: '', cover: '', genre: '' });
@@ -678,10 +665,10 @@
                     if (!newSong.artistId) return alert('Selecione um Artista!');
                     try {
                         if (editingSongId) {
-                            await updateDoc(doc(dbFirestore, 'songs', editingSongId), newSong);
+                            await updateDoc(doc(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs', editingSongId), newSong);
                             alert('Música atualizada!');
                         } else {
-                            await addDoc(collection(dbFirestore, 'songs'), newSong);
+                            await addDoc(collection(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs'), newSong);
                             alert('Música criada!');
                         }
                         setNewSong({ artistId: '', title: '', album: '', key: '', bpm: '', flacLink: '', backingTrackLink: '', youtubeLink: '', cifra: '' });
@@ -692,14 +679,14 @@
                 const editArtist = (artist) => { setNewArtist(artist); setEditingArtistId(artist.id); window.scrollTo(0,0); };
                 const deleteArtist = async (id) => {
                     if(!confirm('Apagar artista e TODAS as suas músicas?')) return;
-                    await deleteDoc(doc(dbFirestore, 'artists', id));
-                    db.songs.filter(s => s.artistId === id).forEach(s => deleteDoc(doc(dbFirestore, 'songs', s.id)));
+                    await deleteDoc(doc(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists', id));
+                    db.songs.filter(s => s.artistId === id).forEach(s => deleteDoc(doc(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs', s.id)));
                 };
 
                 const editSong = (song) => { setNewSong(song); setEditingSongId(song.id); window.scrollTo(0,0); };
                 const deleteSong = async (id) => {
                     if(!confirm('Apagar esta música?')) return;
-                    await deleteDoc(doc(dbFirestore, 'songs', id));
+                    await deleteDoc(doc(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs', id));
                 };
 
                 return (
@@ -709,13 +696,17 @@
                                 <h2 className="text-3xl font-black text-slate-100 flex items-center gap-3">
                                     <i className="ph-fill ph-cloud-check text-emerald-500"></i> Painel da Nuvem
                                 </h2>
+                                <p className="text-slate-400 mt-1">Tudo o que adicionar aqui é guardado instantaneamente.</p>
                             </div>
-                            <button onClick={goHome} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-bold">Sair do Admin</button>
+                            <button onClick={goHome} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-bold">
+                                Sair do Admin
+                            </button>
                         </div>
 
                         <div className="flex gap-2 mb-6 overflow-x-auto">
-                            <button onClick={() => setAdminTab('artists')} className={`px-4 py-2 rounded-lg font-bold ${adminTab === 'artists' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>1. Artistas</button>
-                            <button onClick={() => setAdminTab('songs')} className={`px-4 py-2 rounded-lg font-bold ${adminTab === 'songs' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>2. Músicas</button>
+                            <button onClick={() => setAdminTab('artists')} className={`px-4 py-2 rounded-lg font-bold whitespace-nowrap ${adminTab === 'artists' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>1. Gerir Artistas (Pastas)</button>
+                            <button onClick={() => setAdminTab('songs')} className={`px-4 py-2 rounded-lg font-bold whitespace-nowrap ${adminTab === 'songs' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>2. Gerir Músicas (Ficheiros)</button>
+                            <button onClick={() => setAdminTab('backup')} className={`px-4 py-2 rounded-lg font-bold whitespace-nowrap ${adminTab === 'backup' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>3. Backup / Segurança</button>
                         </div>
 
                         {adminTab === 'artists' && (
@@ -730,7 +721,7 @@
                                         </select>
                                         <div className="flex gap-2">
                                             <input type="url" value={newArtist.cover} onChange={e => setNewArtist({...newArtist, cover: e.target.value})} className="flex-1 w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="URL da Imagem da Capa" />
-                                            <label className="flex items-center justify-center bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 px-4 rounded-lg cursor-pointer transition-colors" title="Fazer Upload de Imagem do Computador">
+                                            <label className="flex items-center justify-center bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 px-4 rounded-lg cursor-pointer transition-colors" title="Upload Imagem">
                                                 <i className="ph ph-upload-simple text-xl"></i>
                                                 <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                                                     const file = e.target.files[0];
@@ -771,43 +762,75 @@
                                     <h3 className="text-xl font-bold mb-4">{editingSongId ? 'Editar Música' : 'Nova Música'}</h3>
                                     <form onSubmit={handleSaveSong} className="flex flex-col gap-4">
                                         <select required value={newSong.artistId} onChange={e => setNewSong({...newSong, artistId: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white">
-                                            <option value="">Selecione um Artista...</option>
+                                            <option value="">Selecione o Artista...</option>
                                             {db.artists.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                                         </select>
-                                        <input required type="text" value={newSong.title} onChange={e => setNewSong({...newSong, title: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Título" />
-                                        <input type="text" value={newSong.album} onChange={e => setNewSong({...newSong, album: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Álbum (Opcional)" />
                                         <div className="grid grid-cols-2 gap-4">
-                                            <input type="text" value={newSong.key} onChange={e => setNewSong({...newSong, key: e.target.value})} className="bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Tom Original (Ex: G)" />
-                                            <input type="text" value={newSong.bpm} onChange={e => setNewSong({...newSong, bpm: e.target.value})} className="bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="BPM" />
+                                            <input required type="text" value={newSong.title} onChange={e => setNewSong({...newSong, title: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Título" />
+                                            <input type="text" value={newSong.album} onChange={e => setNewSong({...newSong, album: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Álbum" />
+                                            <input type="text" value={newSong.key} onChange={e => setNewSong({...newSong, key: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Tom (Ex: G)" />
+                                            <input type="text" value={newSong.bpm} onChange={e => setNewSong({...newSong, bpm: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="BPM" />
                                         </div>
                                         <input type="url" value={newSong.flacLink} onChange={e => setNewSong({...newSong, flacLink: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Link FLAC" />
                                         <input type="url" value={newSong.backingTrackLink} onChange={e => setNewSong({...newSong, backingTrackLink: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Link Backing Tracks" />
                                         <input type="url" value={newSong.youtubeLink} onChange={e => setNewSong({...newSong, youtubeLink: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white" placeholder="Link YouTube" />
-                                        <textarea required rows="8" value={newSong.cifra} onChange={e => setNewSong({...newSong, cifra: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white font-mono text-sm" placeholder="<b>G</b>  <b>D</b>\nLetra..."></textarea>
+                                        <textarea required rows="6" value={newSong.cifra} onChange={e => setNewSong({...newSong, cifra: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white font-mono text-sm" placeholder="<b>G</b>\nLetra..."></textarea>
                                         <div className="flex gap-2">
                                             <button type="submit" className="flex-1 bg-emerald-500 text-slate-950 font-bold p-3 rounded-lg">{editingSongId ? 'Atualizar' : 'Gravar'}</button>
-                                            {editingSongId && <button type="button" onClick={() => {setEditingSongId(null); setNewSong({artistId:'',title:'',album:'',key:'',bpm:'',flacLink:'',backingTrackLink:'',youtubeLink:'',cifra:''})}} className="bg-slate-700 text-white font-bold p-3 rounded-lg">Cancelar</button>}
+                                            {editingSongId && <button type="button" onClick={() => {setEditingSongId(null); setNewSong({artistId: '', title: '', album: '', key: '', bpm: '', flacLink: '', backingTrackLink: '', youtubeLink: '', cifra: ''})}} className="bg-slate-700 text-white font-bold p-3 rounded-lg">Cancelar</button>}
                                         </div>
                                     </form>
                                 </div>
                                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-h-[800px] overflow-y-auto">
                                     <h3 className="text-xl font-bold mb-4">Músicas ({db.songs.length})</h3>
                                     <div className="flex flex-col gap-2">
-                                        {db.songs.map(s => {
-                                            const artist = db.artists.find(a => a.id === s.artistId);
-                                            return (
-                                                <div key={s.id} className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
-                                                    <div>
-                                                        <p className="font-bold text-white">{s.title}</p>
-                                                        <p className="text-xs text-slate-500">{artist?.name}</p>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <button onClick={() => editSong(s)} className="text-blue-400 hover:text-blue-300 p-2 bg-slate-900 rounded"><i className="ph ph-pencil"></i></button>
-                                                        <button onClick={() => deleteSong(s.id)} className="text-red-500 hover:text-red-400 p-2 bg-slate-900 rounded"><i className="ph ph-trash"></i></button>
-                                                    </div>
+                                        {db.songs.map(s => (
+                                            <div key={s.id} className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
+                                                <div><p className="font-bold text-white">{s.title}</p></div>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => editSong(s)} className="text-blue-400 hover:text-blue-300 p-2 bg-slate-900 rounded"><i className="ph ph-pencil"></i></button>
+                                                    <button onClick={() => deleteSong(s.id)} className="text-red-500 hover:text-red-400 p-2 bg-slate-900 rounded"><i className="ph ph-trash"></i></button>
                                                 </div>
-                                            );
-                                        })}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {adminTab === 'backup' && (
+                            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-10 max-w-3xl mx-auto text-center">
+                                <i className="ph-fill ph-shield-check text-6xl text-emerald-500 mb-4"></i>
+                                <h3 className="text-2xl font-black mb-2 text-slate-100">Cofre de Segurança</h3>
+                                <p className="text-slate-400 mb-8">Faça o download de toda a sua base de dados.</p>
+                                <div className="grid md:grid-cols-2 gap-6 text-left">
+                                    <div className="bg-slate-950 p-6 rounded-xl border border-slate-800">
+                                        <h4 className="font-bold text-lg text-emerald-400 mb-2">1. Salvar</h4>
+                                        <button onClick={() => {
+                                            const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+                                            const a = document.createElement('a');
+                                            a.href = URL.createObjectURL(blob);
+                                            a.download = `backup_karaoke_${new Date().toISOString().slice(0,10)}.json`;
+                                            a.click();
+                                        }} className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl"><i className="ph-fill ph-download-simple"></i> Fazer Backup</button>
+                                    </div>
+                                    <div className="bg-slate-950 p-6 rounded-xl border border-slate-800">
+                                        <h4 className="font-bold text-lg text-red-400 mb-2">2. Restaurar</h4>
+                                        <label className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer">
+                                            <i className="ph-fill ph-upload-simple"></i> Restaurar Ficheiro
+                                            <input type="file" accept=".json" className="hidden" onChange={e => {
+                                                const file = e.target.files[0];
+                                                if (!file) return;
+                                                const reader = new FileReader();
+                                                reader.onload = async (ev) => {
+                                                    const data = JSON.parse(ev.target.result);
+                                                    for (const artist of data.artists) await setDoc(doc(dbFirestore, 'artifacts', appId, 'public', 'data', 'artists', artist.id), artist);
+                                                    for (const song of data.songs) await setDoc(doc(dbFirestore, 'artifacts', appId, 'public', 'data', 'songs', song.id), song);
+                                                    alert("Restaurado com sucesso!");
+                                                };
+                                                reader.readAsText(file);
+                                            }} />
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -820,21 +843,31 @@
                 <div className="min-h-screen flex flex-col">
                     <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 print-hidden">
                         <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between">
-                            <div className="flex items-center gap-3 cursor-pointer" onClick={goHome}>
-                                <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center text-slate-950">
+                            <div className="flex items-center gap-3 cursor-pointer group" onClick={goHome}>
+                                <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center text-slate-950 group-hover:rotate-12 transition-transform">
                                     <i className="ph-fill ph-microphone-stage text-2xl"></i>
                                 </div>
-                                <div><h1 className="text-xl font-black text-slate-100">Karaoke<span className="text-emerald-500">Cifra</span></h1></div>
+                                <div>
+                                    <h1 className="text-xl font-black text-slate-100 leading-none">Karaoke<span className="text-emerald-500">Cifra</span></h1>
+                                </div>
                             </div>
+
                             <div className="flex items-center gap-4">
                                 <div className="hidden md:flex relative">
                                     <i className="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
-                                    <input type="text" placeholder="Procurar artista..." value={search} onChange={(e) => { setSearch(e.target.value); if(view !== 'home' && view !== 'admin') goHome(); }} className="bg-slate-900 border border-slate-700 rounded-full py-2 pl-10 pr-4 text-sm text-slate-200 focus:border-emerald-500 w-64" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Procurar artista..." 
+                                        value={search}
+                                        onChange={(e) => { setSearch(e.target.value); if(view !== 'home' && view !== 'admin') goHome(); }}
+                                        className="bg-slate-900 border border-slate-700 rounded-full py-2 pl-10 pr-4 text-sm text-slate-200 focus:outline-none focus:border-emerald-500 w-64"
+                                    />
                                 </div>
-                                <button onClick={() => setShowPix(true)} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-full font-bold text-sm">
+                                
+                                <button onClick={() => setShowPix(true)} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-full font-bold text-sm transition-colors">
                                     <i className="ph-fill ph-hands-clapping"></i> Ajudar Canal
                                 </button>
-                                <button onClick={goAdmin} className="flex items-center justify-center w-10 h-10 bg-slate-900 border border-slate-700 rounded-full text-slate-400 hover:text-emerald-400">
+                                <button onClick={goAdmin} className="flex items-center justify-center w-10 h-10 bg-slate-900 border border-slate-700 hover:bg-slate-800 rounded-full text-slate-400 hover:text-emerald-400 transition-colors">
                                     <i className="ph-fill ph-gear text-xl"></i>
                                 </button>
                             </div>
@@ -849,10 +882,18 @@
                         {view === 'admin' && renderAdmin()}
                     </main>
 
+                    <footer className="border-t border-slate-800 bg-slate-900 mt-auto py-8 print-hidden">
+                        <div className="max-w-6xl mx-auto px-4 text-center text-slate-500 text-sm">
+                            <p className="flex items-center justify-center gap-2">
+                                Criado com <i className="ph-fill ph-heart text-red-500"></i> para músicos.
+                            </p>
+                        </div>
+                    </footer>
+
                     {showPix && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 print-hidden">
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out] print-hidden">
                             <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-md w-full relative text-center">
-                                <button onClick={() => setShowPix(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white"><i className="ph ph-x text-2xl"></i></button>
+                                <button onClick={() => setShowPix(false)} className="absolute top-4 right-4 text-slate-500 hover:text-slate-300"><i className="ph ph-x text-2xl"></i></button>
                                 <div className="w-16 h-16 bg-purple-600/20 text-purple-500 rounded-full flex items-center justify-center mx-auto mb-4"><i className="ph-fill ph-currency-circle-dollar text-3xl"></i></div>
                                 <h3 className="text-2xl font-black text-slate-100 mb-2">Apoie o Canal!</h3>
                                 <p className="text-slate-400 mb-6">O seu apoio ajuda a manter os ficheiros online.</p>
